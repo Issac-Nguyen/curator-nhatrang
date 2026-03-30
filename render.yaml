@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: curator-api
+    runtime: python
+    rootDir: scraper
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --timeout 600 --workers 1
+    envVars:
+      - key: AIRTABLE_TOKEN
+        sync: false
+      - key: APIFY_TOKEN
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: API_SECRET_KEY
+        sync: false

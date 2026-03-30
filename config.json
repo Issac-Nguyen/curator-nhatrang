@@ -1,0 +1,18 @@
+{
+  "baseId": "app8VMuhpjzSw25YF",
+  "baseName": "Nha Trang Curator",
+  "workspaceId": "wspVr2MonCwhSmJIU",
+  "tables": {
+    "sources": "tblYr4FaJCVTLJzay",
+    "rawItems": "tblNZkO6qjwTHOcAk",
+    "contentQueue": "tblwjOxiCWhUEoKEP",
+    "published": "tblPVs04FWNUQTDOR"
+  },
+  "apiEndpoints": {
+    "sources": "https://api.airtable.com/v0/app8VMuhpjzSw25YF/Sources",
+    "rawItems": "https://api.airtable.com/v0/app8VMuhpjzSw25YF/Raw%20Items",
+    "contentQueue": "https://api.airtable.com/v0/app8VMuhpjzSw25YF/Content%20Queue",
+    "published": "https://api.airtable.com/v0/app8VMuhpjzSw25YF/Published"
+  },
+  "testCurl": "curl \"https://api.airtable.com/v0/app8VMuhpjzSw25YF/Sources\" -H \"Authorization: Bearer $AIRTABLE_TOKEN\""
+}
