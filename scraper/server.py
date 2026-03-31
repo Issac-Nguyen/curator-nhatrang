@@ -106,6 +106,22 @@ def run_buffer():
         return jsonify({"error": str(e)}), 500
 
 
+@app.post("/run-newsletter")
+def run_newsletter():
+    err = _check_auth()
+    if err:
+        return err
+    try:
+        from beehiiv_publisher import BeehiivPublisher
+        publisher = BeehiivPublisher()
+        stats = publisher.publish_pending_items(limit=20)
+        log.info(f"/run-newsletter: {stats}")
+        return jsonify(stats)
+    except Exception as e:
+        log.error(f"/run-newsletter error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
