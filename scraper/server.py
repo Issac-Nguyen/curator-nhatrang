@@ -90,6 +90,22 @@ def run_ai_processor():
         return jsonify({"error": str(e)}), 500
 
 
+@app.post("/run-buffer")
+def run_buffer():
+    err = _check_auth()
+    if err:
+        return err
+    try:
+        from buffer_publisher import BufferPublisher
+        publisher = BufferPublisher()
+        stats = publisher.push_pending_items(limit=20)
+        log.info(f"/run-buffer: {stats}")
+        return jsonify(stats)
+    except Exception as e:
+        log.error(f"/run-buffer error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
