@@ -144,7 +144,10 @@ class BufferPublisher:
             updates = result.get("updates", [])
             if not updates:
                 raise RuntimeError(f"Buffer returned no updates: {result}")
-            return updates[0]["id"]
+            buffer_id = updates[0].get("id")
+            if not buffer_id:
+                raise RuntimeError(f"Buffer update missing id: {updates[0]}")
+            return buffer_id
 
         raise RuntimeError("Buffer API rate limit exceeded after retry")
 
