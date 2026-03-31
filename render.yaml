@@ -14,3 +14,9 @@ services:
         sync: false
       - key: API_SECRET_KEY
         sync: false
+      - key: BUFFER_ACCESS_TOKEN
+        sync: false
+      - key: BUFFER_TIKTOK_PROFILE_ID
+        sync: false
+      - key: BUFFER_INSTAGRAM_PROFILE_ID
+        sync: false
