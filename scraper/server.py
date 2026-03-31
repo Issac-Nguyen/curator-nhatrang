@@ -124,6 +124,7 @@ def run_newsletter():
 
 @app.post("/run-visual")
 def run_visual():
+    """Generate images for Approved Content Queue items without images."""
     err = _check_auth()
     if err:
         return err
