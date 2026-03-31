@@ -41,13 +41,13 @@ class BeehiivPublisher:
 
     def publish_pending_items(self, limit: int = 20) -> dict:
         """
-        Fetch Content Queue items với Status=Approved và Beehiiv ID trống,
+        Fetch Content Queue items với Status=Approved,
         publish lên Beehiiv, update Airtable. Returns stats dict.
         """
-        log.info("Fetching Content Queue items with Status=Approved and no Beehiiv ID...")
+        log.info("Fetching Content Queue items with Status=Approved...")
         records = self.client.get_records(
             "contentQueue",
-            filter_formula='AND({Status}="Approved", {Beehiiv ID}="")',
+            filter_formula='{Status}="Approved"',
             max_records=limit,
         )
         log.info(f"Found {len(records)} items to publish to Beehiiv")
@@ -57,6 +57,13 @@ class BeehiivPublisher:
         for record in records:
             record_id = record["id"]
             title = record["fields"].get("Title", "")[:50]
+
+            # Skip if already published to Beehiiv
+            beehiiv_id = record["fields"].get("Beehiiv ID", "").strip()
+            if beehiiv_id:
+                log.debug(f"  [Skip] {title} — already has Beehiiv ID: {beehiiv_id}")
+                stats["skipped"] += 1
+                continue
 
             # Get content
             content_html = record["fields"].get("Draft HTML", "").strip()
