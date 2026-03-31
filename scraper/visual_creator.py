@@ -87,9 +87,9 @@ class VisualCreator:
                 time.sleep(0.5)  # respect Pexels rate limit
 
                 public_id = f"nhatrang/{record_id}"
-                self._upload_to_cloudinary(photo_url, public_id)
+                actual_public_id = self._upload_to_cloudinary(photo_url, public_id)
 
-                image_url = self._build_image_url(public_id, title, caption, hashtags)
+                image_url = self._build_image_url(actual_public_id, title, caption, hashtags)
 
                 self.client.update_record("contentQueue", record_id, {
                     "Image URL": image_url,
@@ -214,9 +214,9 @@ class VisualCreator:
     def _extract_text_parts(self, record: dict) -> tuple[str, str, str]:
         """
         Parse Draft VN thành (title, caption, hashtags).
-        - title: dòng đầu tiên không rỗng, truncate 60 chars
+        - title: dòng đầu tiên không phải hashtag, truncate 60 chars
         - caption: các dòng tiếp theo không phải hashtag, join bằng space, truncate 120 chars
-        - hashtags: dòng/cụm bắt đầu bằng '#', truncate 80 chars
+        - hashtags: dòng bắt đầu bằng '#', truncate 80 chars
         Returns ("", "", "") nếu Draft VN trống.
         """
         draft = record["fields"].get("Draft VN", "").strip()
@@ -228,12 +228,14 @@ class VisualCreator:
         title = ""
         caption_lines = []
         hashtag_lines = []
+        title_set = False
 
-        for i, line in enumerate(lines):
+        for line in lines:
             if line.startswith("#"):
                 hashtag_lines.append(line)
-            elif i == 0 or not title:
+            elif not title_set:
                 title = line
+                title_set = True
             else:
                 caption_lines.append(line)
 
