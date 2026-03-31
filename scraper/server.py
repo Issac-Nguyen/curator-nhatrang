@@ -122,6 +122,22 @@ def run_newsletter():
         return jsonify({"error": str(e)}), 500
 
 
+@app.post("/run-visual")
+def run_visual():
+    err = _check_auth()
+    if err:
+        return err
+    try:
+        from visual_creator import VisualCreator
+        creator = VisualCreator()
+        stats = creator.process_pending(limit=10)
+        log.info(f"/run-visual: {stats}")
+        return jsonify(stats)
+    except Exception as e:
+        log.error(f"/run-visual error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
