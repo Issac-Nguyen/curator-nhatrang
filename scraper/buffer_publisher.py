@@ -46,10 +46,10 @@ class BufferPublisher:
         Fetch Content Queue items với Status=Approved và Buffer ID trống,
         push lên Buffer, update Airtable. Returns stats dict.
         """
-        log.info("Fetching Content Queue items with Status=Approved and no Buffer ID...")
+        log.info("Fetching Content Queue items with Status=Approved, no Buffer ID, has Image URL...")
         records = self.client.get_records(
             "contentQueue",
-            filter_formula='AND({Status}="Approved", {Buffer ID}="")',
+            filter_formula='AND({Status}="Approved", {Buffer ID}="", {Image URL}!="")',
             max_records=limit,
         )
         log.info(f"Found {len(records)} items to push to Buffer")
@@ -67,9 +67,10 @@ class BufferPublisher:
                 continue
 
             link = self._get_link(record)
+            image_url = record["fields"].get("Image URL", "").strip()
 
             try:
-                buffer_id = self._push_to_buffer(caption, link)
+                buffer_id = self._push_to_buffer(caption, link, image_url)
                 # Update Buffer ID first (dedup guard)
                 self.client.update_record("contentQueue", record_id, {
                     "Buffer ID": buffer_id,
@@ -117,28 +118,38 @@ class BufferPublisher:
                 return raw_records[0]["fields"].get("URL", "")
         return ""
 
-    def _push_to_buffer(self, text: str, link: str) -> str:
+    def _push_to_buffer(self, text: str, link: str, image_url: str = "") -> str:
         """
-        Push update lên Buffer cho cả TikTok và Instagram profiles.
-        Return Buffer update ID (ID của update đầu tiên trong response).
-        Retry 1 lần nếu gặp 429.
+        Push update lên Buffer với ảnh nếu có.
+        Gửi cả TikTok + Instagram với media[picture] = image_url.
+        Retry 1 lần nếu gặp 429. Return Buffer update ID.
         """
         profile_ids = [BUFFER_TIKTOK_PROFILE_ID, BUFFER_INSTAGRAM_PROFILE_ID]
-        data = {
-            "access_token": BUFFER_ACCESS_TOKEN,
-            "text": text,
-            "profile_ids[]": profile_ids,
-            "shorten": "false",
-        }
-        if link:
-            data["media[link]"] = link
-
         for attempt in range(2):
+            data = {
+                "access_token": BUFFER_ACCESS_TOKEN,
+                "text": text,
+                "profile_ids[]": profile_ids,
+                "shorten": "false",
+            }
+            if link:
+                data["media[link]"] = link
+            if image_url:
+                data["media[picture]"] = image_url
+
             resp = requests.post(f"{BUFFER_API_BASE}/updates/create.json", data=data)
             if resp.status_code == 429:
                 log.warning("Buffer rate limit, sleeping 5s...")
                 time.sleep(5)
                 continue
+            if resp.status_code == 400:
+                result = resp.json()
+                # Instagram requires image — retry TikTok only
+                if len(profile_ids) > 1:
+                    log.warning(f"Both profiles failed ({result.get('message','')}), retrying TikTok only...")
+                    profile_ids = [BUFFER_TIKTOK_PROFILE_ID]
+                    continue
+                raise RuntimeError(f"Buffer 400: {result.get('message', result)}")
             resp.raise_for_status()
             result = resp.json()
             updates = result.get("updates", [])
