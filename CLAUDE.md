@@ -17,10 +17,12 @@ Sources → Raw Items → Content Queue → Published
 
 ## Stack kỹ thuật
 - Database: Airtable (Base ID lưu trong config.json)
-- Scraping: Apify
-- AI processing: Claude API (claude-sonnet-4-20250514)
-- Automation: n8n
-- Scheduling: Buffer API
+- Scraping: Apify (Facebook), feedparser (RSS)
+- AI processing: Groq (llama-3.3-70b)
+- Image: Pexels (stock photos) + Cloudinary (hosting + transforms)
+- Publishing: Instagram Graph API (auto-refresh token 60 ngày)
+- Automation: GitHub Actions (cron schedules)
+- Hosting: Render (curator-api + curator-n8n)
 - Newsletter: Beehiiv
 
 ## Cấu trúc Airtable — 4 tables
@@ -41,6 +43,7 @@ Status (New/Reviewed/Use/Skip)
 Draft content đã verify, chờ approve và đăng.
 Fields: Title, Raw Item (→Raw Items), Content type,
 Draft VN, Draft EN, Final VN, Final EN,
+Image URL, Buffer ID (dedup guard, format: ig:{media_id}),
 Schedule date, Platform (multi-select),
 Affiliate link, Status (Draft/Editing/Approved/Scheduled/Done)
 
