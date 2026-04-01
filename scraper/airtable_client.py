@@ -160,3 +160,29 @@ class AirtableClient:
         now = datetime.now(timezone.utc).isoformat()
         _request("PATCH", f"{BASE_URL}/Sources/{source_id}", json={"fields": {"Last checked": now}})
         log.debug(f"Updated last_checked for source {source_id}")
+
+    def create_record(self, table_key: str, fields: dict) -> dict:
+        """Create a single record in any table. Returns created record."""
+        table_id = _config["tables"][table_key]
+        fields = {k: v for k, v in fields.items() if v is not None}
+        result = _request("POST", f"{BASE_URL}/{table_id}", json={"records": [{"fields": fields}]})
+        log.info(f"Created record in {table_key}")
+        return result["records"][0]
+
+    def delete_record(self, table_key: str, record_id: str) -> None:
+        """Delete a single record."""
+        table_id = _config["tables"][table_key]
+        _request("DELETE", f"{BASE_URL}/{table_id}/{record_id}")
+        log.info(f"Deleted {record_id} from {table_key}")
+
+    def delete_records_batch(self, table_key: str, record_ids: list[str]) -> int:
+        """Delete up to 10 records per batch. Returns count deleted."""
+        table_id = _config["tables"][table_key]
+        deleted = 0
+        for i in range(0, len(record_ids), 10):
+            batch = record_ids[i:i + 10]
+            params = "&".join(f"records[]={rid}" for rid in batch)
+            _request("DELETE", f"{BASE_URL}/{table_id}?{params}")
+            deleted += len(batch)
+            log.info(f"Batch deleted {len(batch)} records from {table_key}")
+        return deleted
