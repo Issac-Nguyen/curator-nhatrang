@@ -15,6 +15,8 @@ import re
 import time
 from pathlib import Path
 
+import cloudinary
+import cloudinary.uploader
 import requests
 from dotenv import load_dotenv
 
@@ -121,6 +123,13 @@ class InstagramPublisher:
 
         self.client = AirtableClient()
 
+        cloudinary.config(
+            cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+            api_key=os.getenv("CLOUDINARY_API_KEY"),
+            api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+            secure=True,
+        )
+
     def push_pending_items(self, limit: int = 20) -> dict:
         """
         Fetch Content Queue items: Status=Approved, có Image URL, chưa publish.
@@ -154,16 +163,9 @@ class InstagramPublisher:
 
             try:
                 media_id = self._publish_photo(caption, image_url)
-                # Update Buffer ID field as dedup guard (reuse existing field)
-                self.client.update_record("contentQueue", record_id, {
-                    "Buffer ID": f"ig:{media_id}",
-                })
-                self.client.update_record("contentQueue", record_id, {
-                    "Status": "Scheduled",
-                })
                 log.info(f"  [Published] {title} → IG Media ID: {media_id}")
+                self._cleanup_after_publish(record, record_id, media_id)
                 stats["pushed"] += 1
-                # Rate limit: Instagram cho phép 50 posts/24h
                 time.sleep(2)
             except Exception as e:
                 log.error(f"  [Error] {title}: {e}")
@@ -180,6 +182,74 @@ class InstagramPublisher:
             return ""
         parts = [p for p in [vn, en] if p]
         return "\n\n".join(parts)
+
+    def _cleanup_after_publish(self, record: dict, record_id: str, media_id: str) -> None:
+        """
+        Sau khi publish thành công:
+        1. Tạo Published record (với permalink từ Instagram)
+        2. Xóa Cloudinary image
+        3. Xóa Content Queue record
+        4. Xóa Raw Item linked record
+        Best-effort: log errors nhưng không raise.
+        """
+        title = record["fields"].get("Title", "")
+        image_url = record["fields"].get("Image URL", "")
+        raw_item_ids = record["fields"].get("Raw Item", [])
+
+        # 1. Get Instagram permalink
+        permalink = ""
+        try:
+            resp = requests.get(
+                f"{GRAPH_API_BASE}/{media_id}",
+                params={"fields": "permalink", "access_token": self.access_token},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                permalink = resp.json().get("permalink", "")
+        except Exception as e:
+            log.warning(f"  [Cleanup] Failed to get permalink: {e}")
+
+        # 2. Create Published record
+        try:
+            from datetime import datetime, timezone
+            self.client.create_record("published", {
+                "Title": title,
+                "Platform": "Instagram",
+                "Post URL": permalink,
+                "Published at": datetime.now(timezone.utc).isoformat(),
+            })
+            log.info(f"  [Cleanup] Created Published record")
+        except Exception as e:
+            log.warning(f"  [Cleanup] Failed to create Published record: {e}")
+
+        # 3. Delete Cloudinary image
+        if image_url and "cloudinary.com" in image_url:
+            try:
+                parts = image_url.split("/upload/")
+                if len(parts) == 2:
+                    path = parts[1]
+                    if path.startswith("v"):
+                        path = path.split("/", 1)[1] if "/" in path else path
+                    public_id = path.rsplit(".", 1)[0] if "." in path else path
+                    cloudinary.uploader.destroy(public_id)
+                    log.info(f"  [Cleanup] Deleted Cloudinary image: {public_id}")
+            except Exception as e:
+                log.warning(f"  [Cleanup] Failed to delete Cloudinary image: {e}")
+
+        # 4. Delete Content Queue record
+        try:
+            self.client.delete_record("contentQueue", record_id)
+            log.info(f"  [Cleanup] Deleted Content Queue record")
+        except Exception as e:
+            log.warning(f"  [Cleanup] Failed to delete Content Queue record: {e}")
+
+        # 5. Delete Raw Item linked record
+        if raw_item_ids:
+            try:
+                self.client.delete_record("rawItems", raw_item_ids[0])
+                log.info(f"  [Cleanup] Deleted Raw Item")
+            except Exception as e:
+                log.warning(f"  [Cleanup] Failed to delete Raw Item: {e}")
 
     def _publish_photo(self, caption: str, image_url: str) -> str:
         """
