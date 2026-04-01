@@ -171,6 +171,52 @@ def run_visual():
         return jsonify({"error": str(e)}), 500
 
 
+@app.post("/run-cleanup")
+def run_cleanup():
+    err = _check_auth()
+    if err:
+        return err
+    try:
+        client = AirtableClient()
+        stats = {"published_deleted": 0, "raw_skip_deleted": 0, "raw_old_deleted": 0}
+
+        # 1. Delete Published records > 30 days
+        old_published = client.get_records(
+            "published",
+            filter_formula='IS_BEFORE({Published at}, DATEADD(TODAY(), -30, "days"))',
+            max_records=100,
+        )
+        if old_published:
+            ids = [r["id"] for r in old_published]
+            stats["published_deleted"] = client.delete_records_batch("published", ids)
+
+        # 2. Delete Raw Items Status=Skip
+        skip_items = client.get_records(
+            "rawItems",
+            filter_formula='{Status}="Skip"',
+            max_records=100,
+        )
+        if skip_items:
+            ids = [r["id"] for r in skip_items]
+            stats["raw_skip_deleted"] = client.delete_records_batch("rawItems", ids)
+
+        # 3. Delete Raw Items Status=New older than 30 days
+        old_new_items = client.get_records(
+            "rawItems",
+            filter_formula='AND({Status}="New", IS_BEFORE({Collected at}, DATEADD(TODAY(), -30, "days")))',
+            max_records=100,
+        )
+        if old_new_items:
+            ids = [r["id"] for r in old_new_items]
+            stats["raw_old_deleted"] = client.delete_records_batch("rawItems", ids)
+
+        log.info(f"/run-cleanup: {stats}")
+        return jsonify(stats)
+    except Exception as e:
+        log.error(f"/run-cleanup error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
