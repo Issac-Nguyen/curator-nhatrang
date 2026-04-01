@@ -3,14 +3,14 @@ Visual Creator — tạo ảnh branded cho Content Queue items.
 
 Logic:
 - Query Content Queue: Status=Approved AND Image URL trống
-- Với mỗi item: fetch ảnh Pexels → upload Cloudinary → build transform URL
-- Update Airtable: Image URL
+- Với mỗi item: lấy ảnh nguồn (priority) hoặc Pexels (fallback)
+  → upload Cloudinary với eager transforms (pre-render text overlay)
+  → lưu eager URL (ảnh JPEG đã render) vào Airtable
 - Không fail toàn run khi 1 item lỗi
 """
 import logging
 import os
 import time
-import urllib.parse
 from pathlib import Path
 
 import cloudinary
@@ -83,13 +83,16 @@ class VisualCreator:
                 category = record["fields"].get("Category", "")
                 keywords = title[:30]
 
-                photo_url = self._get_pexels_photo_url(category, keywords)
-                time.sleep(0.5)  # respect Pexels rate limit
+                # Priority: source image > Pexels
+                photo_url = self._get_source_image_url(record)
+                if not photo_url:
+                    photo_url = self._get_pexels_photo_url(category, keywords)
+                    time.sleep(0.5)  # respect Pexels rate limit
 
                 public_id = f"nhatrang/{record_id}"
-                actual_public_id = self._upload_to_cloudinary(photo_url, public_id)
-
-                image_url = self._build_image_url(actual_public_id, title, caption, hashtags)
+                image_url = self._upload_to_cloudinary(
+                    photo_url, public_id, title, caption,
+                )
 
                 self.client.update_record("contentQueue", record_id, {
                     "Image URL": image_url,
@@ -122,16 +125,61 @@ class VisualCreator:
             log.warning(f"Pexels fetch failed: {e}")
             return None
 
-    def _upload_to_cloudinary(self, photo_url: str | None, public_id: str) -> str:
+    def _get_source_image_url(self, record: dict) -> str | None:
+        """Lấy Source Image URL từ Raw Item linked record."""
+        raw_item_ids = record["fields"].get("Raw Item", [])
+        if not raw_item_ids:
+            return None
+        raw_records = self.client.get_records(
+            "rawItems",
+            filter_formula=f'RECORD_ID()="{raw_item_ids[0]}"',
+            max_records=1,
+        )
+        if not raw_records:
+            return None
+        url = raw_records[0]["fields"].get("Source Image URL", "").strip()
+        if url:
+            log.info(f"  Found source image: {url[:80]}...")
+        return url or None
+
+    def _upload_to_cloudinary(self, photo_url: str | None, public_id: str,
+                              title: str = "", caption: str = "") -> str:
         """
-        Upload ảnh lên Cloudinary.
-        Nếu photo_url là None: dùng placeholder gradient (public_id cố định).
-        Retry 1 lần nếu lỗi. Returns public_id.
+        Upload ảnh lên Cloudinary với eager transforms (pre-render text overlay).
+        Returns eager URL (ảnh JPEG đã render sẵn với text).
         """
         if photo_url is None:
-            log.info(f"No Pexels photo, using gradient placeholder for {public_id}")
+            log.info(f"No photo, using gradient placeholder for {public_id}")
             self._ensure_placeholder()
-            return "nhatrang/placeholder"
+            photo_url = f"https://res.cloudinary.com/{self.cloud_name}/image/upload/nhatrang/placeholder"
+
+        eager_transforms = [
+            {"width": 1080, "height": 1080, "crop": "fill"},
+            {"effect": "brightness:-30"},
+            # Brand name
+            {"overlay": {"font_family": "Arial", "font_size": 26, "font_weight": "bold",
+                         "text": "NHA TRANG CURATOR"},
+             "color": "#2d9e6b", "gravity": "south_west", "x": 50, "y": 280},
+            {"flags": "layer_apply"},
+        ]
+
+        if title:
+            eager_transforms.extend([
+                {"overlay": {"font_family": "Arial", "font_size": 40, "font_weight": "bold",
+                             "text": title[:55]},
+                 "color": "#ffffff", "gravity": "south_west", "x": 50, "y": 160,
+                 "width": 980, "crop": "fit"},
+                {"flags": "layer_apply"},
+            ])
+
+        if caption:
+            eager_transforms.extend([
+                {"overlay": {"font_family": "Arial", "font_size": 24,
+                             "text": caption[:110]},
+                 "color": "#cccccc", "gravity": "south_west", "x": 50, "y": 50,
+                 "width": 980, "crop": "fit"},
+                {"flags": "layer_apply"},
+            ])
 
         for attempt in range(2):
             try:
@@ -140,9 +188,16 @@ class VisualCreator:
                     public_id=public_id,
                     overwrite=True,
                     resource_type="image",
+                    eager=[{"transformation": eager_transforms}],
+                    eager_async=False,
                 )
-                log.info(f"Uploaded to Cloudinary: {result['public_id']}")
-                return result["public_id"]
+                eager = result.get("eager", [])
+                if eager and eager[0].get("secure_url"):
+                    eager_url = eager[0]["secure_url"]
+                    log.info(f"  Eager URL: {eager_url[:80]}...")
+                    return eager_url
+                log.warning("Eager returned no URL, using base upload URL")
+                return result.get("secure_url", "")
             except Exception as e:
                 if attempt == 0:
                     log.warning(f"Cloudinary upload attempt 1 failed: {e}, retrying...")
@@ -170,46 +225,6 @@ class VisualCreator:
                 log.info("Uploaded gradient placeholder to Cloudinary")
             except Exception as e:
                 log.warning(f"Could not create placeholder: {e}")
-
-    def _build_image_url(self, public_id: str, title: str, caption: str, hashtags: str) -> str:
-        """
-        Build Cloudinary transformation URL với text overlays.
-        Text được URL-encoded đúng cách.
-        """
-        def enc(text: str) -> str:
-            """URL-encode text cho Cloudinary overlay (encode slash và comma)."""
-            return urllib.parse.quote(text, safe="")
-
-        transformations = [
-            "c_fill,w_1080,h_1080",
-            "e_brightness:-40",
-        ]
-
-        if title:
-            t = enc(title[:55])
-            transformations.append(
-                f"l_text:DejaVu%20Sans_40_bold,co_rgb:ffffff,g_north_west,x_50,y_60,w_980,c_fit/{t}/fl_layer_apply"
-            )
-
-        if caption:
-            c = enc(caption[:110])
-            transformations.append(
-                f"l_text:DejaVu%20Sans_28,co_rgb:dddddd,g_south_west,x_50,y_100,w_980,c_fit/{c}/fl_layer_apply"
-            )
-
-        if hashtags:
-            h = enc(hashtags[:80])
-            transformations.append(
-                f"l_text:DejaVu%20Sans_24,co_rgb:2d9e6b,g_south_west,x_50,y_55,w_980,c_fit/{h}/fl_layer_apply"
-            )
-
-        brand = enc("NHA TRANG")
-        transformations.append(
-            f"l_text:DejaVu%20Sans_22_bold,co_rgb:2d9e6b,g_north_west,x_50,y_20/{brand}/fl_layer_apply"
-        )
-
-        transform_str = "/".join(transformations)
-        return f"https://res.cloudinary.com/{self.cloud_name}/image/upload/{transform_str}/{public_id}"
 
     def _extract_text_parts(self, record: dict) -> tuple[str, str, str]:
         """
