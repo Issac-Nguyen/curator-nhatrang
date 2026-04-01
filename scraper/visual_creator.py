@@ -62,7 +62,7 @@ def _draw_wrapped_text(draw, text, pos, font, fill, max_width):
         lines.append(current)
 
     x, y = pos
-    for line in lines[:3]:  # max 3 lines
+    for line in lines[:4]:  # max 4 lines
         draw.text((x, y), line, fill=fill, font=font)
         bbox = draw.textbbox((0, 0), line, font=font)
         y += bbox[3] - bbox[1] + 6
@@ -240,36 +240,35 @@ class VisualCreator:
     @staticmethod
     def _render_text_overlay(img: Image.Image, title: str, caption: str) -> Image.Image:
         """
-        Bottom gradient info card overlay:
-        - Gradient đen fade nhẹ từ 60% xuống dưới
+        Bottom gradient info card overlay (~50% ảnh):
+        - Gradient đen fade từ giữa xuống dưới
         - Brand "NHA TRANG CURATOR" (xanh lá)
-        - Title (trắng, bold, max 2 dòng)
-        - Caption/info (xám nhạt, max 2 dòng)
+        - Title (trắng, bold, max 3 dòng)
+        - Caption/info (xám nhạt, max 3 dòng)
         """
-        # Strip emoji (fonts can't render them → shows ▯▯)
         title = _strip_emoji(title)
         caption = _strip_emoji(caption)
 
         draw = ImageDraw.Draw(img, "RGBA")
         w, h = img.size
 
-        # Gradient overlay (bottom 40%, nhẹ hơn)
-        for y in range(int(h * 0.6), h):
-            progress = (y - h * 0.6) / (h * 0.4)
-            alpha = int(180 * progress)
+        # Gradient overlay (bottom 55%)
+        gradient_start = int(h * 0.45)
+        for y in range(gradient_start, h):
+            progress = (y - gradient_start) / (h - gradient_start)
+            alpha = int(220 * progress)
             draw.rectangle([(0, y), (w, y + 1)], fill=(0, 0, 0, alpha))
 
-        # Load font (try system fonts, fallback to default)
         draw = ImageDraw.Draw(img)
         try:
-            font_brand = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
-            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
-            font_caption = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
+            font_brand = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24)
+            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+            font_caption = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
         except OSError:
             try:
-                font_brand = ImageFont.truetype("Arial Bold", 22)
-                font_title = ImageFont.truetype("Arial Bold", 32)
-                font_caption = ImageFont.truetype("Arial", 20)
+                font_brand = ImageFont.truetype("Arial Bold", 24)
+                font_title = ImageFont.truetype("Arial Bold", 36)
+                font_caption = ImageFont.truetype("Arial", 24)
             except OSError:
                 font_brand = ImageFont.load_default()
                 font_title = font_brand
@@ -277,17 +276,17 @@ class VisualCreator:
 
         margin = 40
 
-        # Brand name
-        draw.text((margin, h - 230), "NHA TRANG CURATOR", fill="#2d9e6b", font=font_brand)
+        # Brand name (top of text area)
+        draw.text((margin, h - 420), "NHA TRANG CURATOR", fill="#2d9e6b", font=font_brand)
 
-        # Title (word wrap, max 2 lines)
+        # Title (bold, max 3 lines)
         if title:
-            _draw_wrapped_text(draw, title[:60], (margin, h - 200), font_title,
+            _draw_wrapped_text(draw, title[:80], (margin, h - 380), font_title,
                                fill="white", max_width=w - 2 * margin)
 
-        # Caption (max 2 lines)
+        # Caption (max 3 lines)
         if caption:
-            _draw_wrapped_text(draw, caption[:100], (margin, h - 100), font_caption,
+            _draw_wrapped_text(draw, caption[:150], (margin, h - 200), font_caption,
                                fill="#cccccc", max_width=w - 2 * margin)
 
         return img
