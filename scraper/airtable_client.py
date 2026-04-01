@@ -109,6 +109,7 @@ class AirtableClient:
                     "URL": data.get("url", ""),
                     "Published date": data.get("published_date"),
                     "Collected at": data.get("collected_at"),
+                    "Source Image URL": data.get("source_image_url"),
                     "Status": "New",
                 }
                 if data.get("source_id"):

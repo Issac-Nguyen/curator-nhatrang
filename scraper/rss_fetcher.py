@@ -69,6 +69,29 @@ def fetch(source: dict) -> list[dict]:
         if hasattr(entry, "content") and entry.content:
             content = entry.content[0].get("value", content)
 
+        # Extract image URL from various feed fields
+        image_url = None
+        enclosures = getattr(entry, "enclosures", None)
+        if enclosures:
+            for enc in enclosures:
+                if enc.get("type", "").startswith("image/"):
+                    image_url = enc.get("href") or enc.get("url")
+                    break
+        if not image_url:
+            media_content = getattr(entry, "media_content", None)
+            if media_content:
+                for mc in media_content:
+                    if mc.get("medium") == "image" or mc.get("type", "").startswith("image/"):
+                        image_url = mc.get("url")
+                        break
+        if not image_url:
+            links = getattr(entry, "links", None)
+            if links:
+                for link in links:
+                    if link.get("type", "").startswith("image/"):
+                        image_url = link.get("href") or link.get("url")
+                        break
+
         items.append({
             "title": title.strip(),
             "content": content.strip(),
@@ -78,6 +101,7 @@ def fetch(source: dict) -> list[dict]:
             "source_name": source_name,
             "source_id": source_id,
             "fetcher_type": "rss",
+            "source_image_url": image_url,
         })
 
     log.info(f"RSS {source_name}: fetched {len(items)} entries")

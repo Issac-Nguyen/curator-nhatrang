@@ -115,6 +115,12 @@ class ApifyFetcher:
             except Exception:
                 published_date = datetime.now(timezone.utc).isoformat()
 
+        source_image_url = (
+            post.get("imageUrl")
+            or post.get("fullPicture")
+            or post.get("picture")
+        )
+
         return {
             "title": text[:100].strip() if text else "",
             "content": text.strip(),
@@ -124,4 +130,5 @@ class ApifyFetcher:
             "source_name": source_name,
             "source_id": source_id,
             "fetcher_type": "facebook",
+            "source_image_url": source_image_url,
         }
