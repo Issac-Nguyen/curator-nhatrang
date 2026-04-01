@@ -13,9 +13,13 @@ import os
 import time
 from pathlib import Path
 
+import io
+import tempfile
+
 import cloudinary
 import cloudinary.uploader
 import requests
+from PIL import Image, ImageDraw, ImageFont
 from dotenv import load_dotenv
 
 from airtable_client import AirtableClient
@@ -29,6 +33,30 @@ CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
 CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
 
 PEXELS_API_BASE = "https://api.pexels.com/v1"
+
+
+def _draw_wrapped_text(draw, text, pos, font, fill, max_width):
+    """Draw text with word wrapping."""
+    words = text.split()
+    lines = []
+    current = ""
+    for word in words:
+        test = f"{current} {word}".strip()
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] - bbox[0] <= max_width:
+            current = test
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+
+    x, y = pos
+    for line in lines[:3]:  # max 3 lines
+        draw.text((x, y), line, fill=fill, font=font)
+        bbox = draw.textbbox((0, 0), line, font=font)
+        y += bbox[3] - bbox[1] + 6
 
 
 class VisualCreator:
@@ -145,65 +173,110 @@ class VisualCreator:
     def _upload_to_cloudinary(self, photo_url: str | None, public_id: str,
                               title: str = "", caption: str = "") -> str:
         """
-        Upload ảnh lên Cloudinary với eager transforms (pre-render text overlay).
-        Returns eager URL (ảnh JPEG đã render sẵn với text).
+        Download ảnh, render text overlay bằng Pillow, upload lên Cloudinary.
+        Cloudinary text overlay không hỗ trợ tiếng Việt có dấu → dùng Pillow.
+        Returns clean secure_url.
         """
         if photo_url is None:
             log.info(f"No photo, using gradient placeholder for {public_id}")
             self._ensure_placeholder()
             photo_url = f"https://res.cloudinary.com/{self.cloud_name}/image/upload/nhatrang/placeholder"
 
-        eager_transforms = [
-            {"width": 1080, "height": 1080, "crop": "fill"},
-            {"effect": "brightness:-30"},
-            # Brand name
-            {"overlay": {"font_family": "Arial", "font_size": 26, "font_weight": "bold",
-                         "text": "NHA TRANG CURATOR"},
-             "color": "#2d9e6b", "gravity": "south_west", "x": 50, "y": 280},
-            {"flags": "layer_apply"},
-        ]
+        # Step 1: Download ảnh
+        resp = requests.get(photo_url, timeout=30)
+        resp.raise_for_status()
+        img = Image.open(io.BytesIO(resp.content)).convert("RGB")
 
-        if title:
-            eager_transforms.extend([
-                {"overlay": {"font_family": "Arial", "font_size": 40, "font_weight": "bold",
-                             "text": title[:55]},
-                 "color": "#ffffff", "gravity": "south_west", "x": 50, "y": 160,
-                 "width": 980, "crop": "fit"},
-                {"flags": "layer_apply"},
-            ])
+        # Step 2: Crop/resize to 1080x1080
+        img = self._crop_square(img, 1080)
 
-        if caption:
-            eager_transforms.extend([
-                {"overlay": {"font_family": "Arial", "font_size": 24,
-                             "text": caption[:110]},
-                 "color": "#cccccc", "gravity": "south_west", "x": 50, "y": 50,
-                 "width": 980, "crop": "fit"},
-                {"flags": "layer_apply"},
-            ])
+        # Step 3: Render text overlay
+        img = self._render_text_overlay(img, title, caption)
+
+        # Step 4: Upload to Cloudinary
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=90)
+        buf.seek(0)
 
         for attempt in range(2):
             try:
                 result = cloudinary.uploader.upload(
-                    photo_url,
+                    buf,
                     public_id=public_id,
                     overwrite=True,
                     resource_type="image",
-                    eager=[{"transformation": eager_transforms}],
-                    eager_async=False,
+                    format="jpg",
                 )
-                eager = result.get("eager", [])
-                if eager and eager[0].get("secure_url"):
-                    eager_url = eager[0]["secure_url"]
-                    log.info(f"  Eager URL: {eager_url[:80]}...")
-                    return eager_url
-                log.warning("Eager returned no URL, using base upload URL")
-                return result.get("secure_url", "")
+                url = result["secure_url"]
+                log.info(f"  Uploaded rendered image: {url[:80]}...")
+                return url
             except Exception as e:
                 if attempt == 0:
-                    log.warning(f"Cloudinary upload attempt 1 failed: {e}, retrying...")
+                    log.warning(f"Upload attempt 1 failed: {e}, retrying...")
+                    buf.seek(0)
                     time.sleep(2)
                 else:
                     raise RuntimeError(f"Cloudinary upload failed after retry: {e}")
+
+    @staticmethod
+    def _crop_square(img: Image.Image, size: int) -> Image.Image:
+        """Center crop to square, then resize."""
+        w, h = img.size
+        side = min(w, h)
+        left = (w - side) // 2
+        top = (h - side) // 2
+        img = img.crop((left, top, left + side, top + side))
+        return img.resize((size, size), Image.LANCZOS)
+
+    @staticmethod
+    def _render_text_overlay(img: Image.Image, title: str, caption: str) -> Image.Image:
+        """
+        Bottom gradient info card overlay:
+        - Gradient đen fade từ giữa xuống dưới
+        - Brand "NHA TRANG CURATOR" (xanh lá)
+        - Title (trắng, bold)
+        - Caption/info (xám nhạt)
+        """
+        draw = ImageDraw.Draw(img, "RGBA")
+        w, h = img.size
+
+        # Gradient overlay (bottom 50%)
+        for y in range(h // 2, h):
+            alpha = int(200 * (y - h // 2) / (h // 2))
+            draw.rectangle([(0, y), (w, y + 1)], fill=(0, 0, 0, alpha))
+
+        # Load font (try system fonts, fallback to default)
+        draw = ImageDraw.Draw(img)
+        try:
+            font_brand = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
+            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 38)
+            font_caption = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22)
+        except OSError:
+            try:
+                font_brand = ImageFont.truetype("Arial Bold", 26)
+                font_title = ImageFont.truetype("Arial Bold", 38)
+                font_caption = ImageFont.truetype("Arial", 22)
+            except OSError:
+                font_brand = ImageFont.load_default()
+                font_title = font_brand
+                font_caption = font_brand
+
+        margin = 50
+
+        # Brand name
+        draw.text((margin, h - 280), "NHA TRANG CURATOR", fill="#2d9e6b", font=font_brand)
+
+        # Title (word wrap)
+        if title:
+            _draw_wrapped_text(draw, title[:55], (margin, h - 240), font_title,
+                               fill="white", max_width=w - 2 * margin)
+
+        # Caption
+        if caption:
+            _draw_wrapped_text(draw, caption[:110], (margin, h - 110), font_caption,
+                               fill="#cccccc", max_width=w - 2 * margin)
+
+        return img
 
     def _ensure_placeholder(self) -> None:
         """Upload gradient placeholder nếu chưa tồn tại."""
