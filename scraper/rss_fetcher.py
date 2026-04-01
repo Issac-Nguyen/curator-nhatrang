@@ -4,6 +4,8 @@ from email.utils import parsedate_to_datetime
 
 import feedparser
 
+from og_image import extract_og_image
+
 log = logging.getLogger(__name__)
 
 
@@ -91,6 +93,10 @@ def fetch(source: dict) -> list[dict]:
                     if link.get("type", "").startswith("image/"):
                         image_url = link.get("href") or link.get("url")
                         break
+
+        # Fallback: extract og:image from article URL
+        if not image_url:
+            image_url = extract_og_image(entry_url)
 
         items.append({
             "title": title.strip(),

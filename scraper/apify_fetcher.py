@@ -7,6 +7,8 @@ import requests
 from dotenv import load_dotenv
 from pathlib import Path
 
+from og_image import extract_og_image
+
 load_dotenv(Path(__file__).parent.parent / ".env")
 log = logging.getLogger(__name__)
 
@@ -120,6 +122,12 @@ class ApifyFetcher:
             or post.get("fullPicture")
             or post.get("picture")
         )
+
+        # Fallback: extract og:image from post URL
+        if not source_image_url:
+            post_url = self._get_url(post)
+            if post_url:
+                source_image_url = extract_og_image(post_url)
 
         return {
             "title": text[:100].strip() if text else "",
