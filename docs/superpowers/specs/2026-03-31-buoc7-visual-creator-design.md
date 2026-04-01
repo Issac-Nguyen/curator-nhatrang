@@ -2,7 +2,7 @@
 
 ## Goal
 
-Tự động tạo ảnh branded (1080×1080) từ Content Queue items có Status=Approved và chưa có Image URL. Dùng Pexels làm ảnh nền, upload lên Cloudinary, dùng Cloudinary URL transformations để overlay text — không cần Pillow hay moviepy local. Lưu Image URL vào Airtable để Buffer dùng khi đăng TikTok (photo) và Instagram.
+Tự động tạo ảnh branded (1080×1080) từ Content Queue items có Status=Approved và chưa có Image URL. Dùng Pexels làm ảnh nền, upload lên Cloudinary, dùng Cloudinary URL transformations để overlay text — không cần Pillow hay moviepy local. Lưu Image URL vào Airtable để Instagram Publisher dùng khi đăng.
 
 ## Pipeline Flow
 
@@ -14,7 +14,7 @@ Content Queue (Status=Approved, no Image URL)
   → Airtable: update Image URL
 ```
 
-Buffer sau đó đọc Image URL → đăng Instagram (photo) + TikTok (photo post).
+Instagram Publisher sau đó đọc Image URL → clean URL (strip text overlay) → đăng qua Instagram Graph API.
 
 **Không dùng:** Pillow, moviepy, local image processing.
 
@@ -23,7 +23,7 @@ Buffer sau đó đọc Image URL → đăng Instagram (photo) + TikTok (photo po
 - **`scraper/visual_creator.py`** — VisualCreator class
 - **`/run-visual` endpoint** trong `scraper/server.py`
 - **1 Airtable field mới** trong Content Queue: `Image URL`
-- **Buffer Publisher update** — dùng `Image URL` cho cả Instagram lẫn TikTok
+- **Instagram Publisher** — dùng `Image URL` (clean URL, strip text overlay) để publish
 
 ## How Cloudinary Transformations Work
 
@@ -94,15 +94,15 @@ def run_visual():
 
 Tạo field `Image URL` (type: `url`) trong Content Queue qua Metadata API.
 
-### Buffer Publisher update (`scraper/buffer_publisher.py`)
+### Instagram Publisher (`scraper/instagram_publisher.py`)
 
-- Filter thêm `{Image URL}!=""` — chỉ push items đã có ảnh
-- Gửi `media[picture]` = Image URL cho cả TikTok lẫn Instagram
-- TikTok nhận photo post thay vì video (ok cho giai đoạn hiện tại)
+- Filter: `{Image URL}!=""` — chỉ publish items đã có ảnh
+- Clean URL: strip Cloudinary text overlay → `c_fill,w_1080,h_1080/{public_id}.jpg`
+- Instagram Graph API: create container → publish
 
 ### n8n workflow
 
-Thêm HTTP Request node `/run-visual` trước `/run-buffer`.
+Thêm HTTP Request node `/run-visual` trước `/run-instagram`.
 
 ## Text Layout
 

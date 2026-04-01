@@ -1,13 +1,13 @@
-# Bước 5: Buffer Publisher — Design Spec
+# Bước 5: Instagram Publisher — Design Spec
 
-**Status:** Designed  
-**Date:** 2026-03-31
+**Status:** Implemented  
+**Date:** 2026-03-31 (updated 2026-04-01: chuyển từ Buffer sang Instagram Graph API)
 
 ---
 
 ## Mục tiêu
 
-Tự động push Content Queue items (Status=Approved) lên Buffer để schedule đăng TikTok và Instagram. n8n poll mỗi 30 phút, gọi `/run-buffer` endpoint, Python xử lý Buffer API + cập nhật Airtable.
+Tự động push Content Queue items (Status=Approved) lên Instagram qua Instagram Graph API (Content Publishing). n8n poll mỗi 30 phút, gọi `/run-instagram` endpoint, Python xử lý Instagram API + cập nhật Airtable.
 
 ---
 
@@ -15,79 +15,84 @@ Tự động push Content Queue items (Status=Approved) lên Buffer để schedu
 
 ```
 n8n (every 30 min)
-  → POST /run-buffer (curator-api)
-      → BufferPublisher.push_pending_items()
+  → POST /run-instagram (curator-api)
+      → InstagramPublisher (auto-refresh token nếu gần hết hạn)
           → Airtable: query Content Queue (Status=Approved, Buffer ID trống)
           → loop items:
-              → Buffer API: create update cho TikTok profile
-              → Buffer API: create update cho Instagram profile
-              → Airtable: update Status=Scheduled, Buffer ID
+              → Cloudinary: clean image URL (strip text overlay)
+              → Instagram API: create media container (image + caption)
+              → Instagram API: publish container
+              → Airtable: update Status=Scheduled, Buffer ID = ig:{media_id}
       → return {pushed: N, errors: M}
-  → Telegram: "✅ Buffer: pushed N items"
+  → Telegram: "✅ Instagram: pushed N items"
 ```
 
 ---
 
 ## Components
 
-### `BufferPublisher` (`scraper/buffer_publisher.py`)
+### `InstagramPublisher` (`scraper/instagram_publisher.py`)
 
-Class xử lý Buffer API calls và Airtable updates.
+Class xử lý Instagram Graph API calls và Airtable updates.
 
 **Methods:**
-- `__init__()` — load `BUFFER_ACCESS_TOKEN` từ `.env`, raise `RuntimeError` nếu không set. Load Buffer profile IDs cho TikTok và Instagram từ `.env` (`BUFFER_TIKTOK_PROFILE_ID`, `BUFFER_INSTAGRAM_PROFILE_ID`).
-- `push_pending_items(limit=20)` — fetch Content Queue records với `Status=Approved` và `Buffer ID` trống, loop qua từng item, gọi `_push_item()`, trả về stats dict.
-- `_push_item(record)` — push 1 item lên cả TikTok và Instagram profiles. Return `(success, buffer_id)`.
+- `__init__()` — auto-refresh token via `_refresh_token_if_needed()`, load `INSTAGRAM_ACCESS_TOKEN` và `INSTAGRAM_USER_ID` từ `.env`, config Cloudinary. Raise `RuntimeError` nếu thiếu env vars.
+- `push_pending_items(limit=20)` — fetch Content Queue records với `Status=Approved`, `Image URL` có, và `Buffer ID` trống. Loop qua từng item, gọi `_publish_photo()`, trả về stats dict.
 - `_build_caption(record)` — ghép `Draft VN` + `"\n\n"` + `Draft EN`. Return empty string nếu cả 2 đều trống.
-- `_get_link(record)` — lấy `Affiliate link` nếu có, fallback về URL từ Raw Item linked record.
+- `_get_clean_image_url(image_url)` — strip Cloudinary text overlay transformations, build URL đơn giản `c_fill,w_1080,h_1080/{public_id}.jpg`.
+- `_publish_photo(caption, image_url)` — 2 bước: create container → publish. Return media ID.
 
-**Buffer API call:**
+**Token auto-refresh:**
+- `_refresh_token_if_needed()` — gọi `GET /refresh_access_token?grant_type=ig_refresh_token`, cập nhật `.env` tự động.
+- `_update_env_token(new_token)` — regex replace `INSTAGRAM_ACCESS_TOKEN` trong `.env`.
+
+**Instagram API calls:**
 ```
-POST https://api.bufferapp.com/1/updates/create.json
-Authorization: Bearer {BUFFER_ACCESS_TOKEN}
-Body: profile_ids[]=..., text=..., shorten=false
+Step 1: POST https://graph.instagram.com/v22.0/{ig_user_id}/media
+        Body: image_url, caption, access_token
+        → Returns: container_id
+
+Step 2: POST https://graph.instagram.com/v22.0/{ig_user_id}/media_publish
+        Body: creation_id={container_id}, access_token
+        → Returns: media_id
 ```
 
-Push lên cả 2 profiles trong 1 lần call bằng cách pass cả 2 profile_ids. Buffer trả về array updates — lưu `updates[0].id` làm `Buffer ID` trong Airtable để dedup.
-
-### `server.py` — endpoint `/run-buffer`
+### `server.py` — endpoints
 
 ```python
-@app.route("/run-buffer", methods=["POST"])
-def run_buffer():
-    publisher = BufferPublisher()
-    stats = publisher.push_pending_items(limit=20)
-    return jsonify(stats)
+@app.post("/run-instagram")    # publish Content Queue items
+@app.post("/refresh-instagram-token")  # manual token refresh
 ```
 
-### n8n Workflow "Buffer Publisher"
+### n8n Workflow "Instagram Publisher"
 
 - **Schedule Trigger:** mỗi 30 phút
-- **HTTP Request node:** `POST {CURATOR_API_URL}/run-buffer`
-- **Telegram node:** `✅ Buffer: pushed {{ $json.pushed }} items | errors: {{ $json.errors }}`
+- **HTTP Request node:** `POST {CURATOR_API_URL}/run-instagram`
+- **Telegram node:** `✅ Instagram: pushed {{ $json.pushed }} items | errors: {{ $json.errors }}`
 
 ---
 
 ## Airtable Changes
 
-Content Queue table cần thêm:
-- **Field `Buffer ID`** (Single line text) — lưu Buffer update ID sau khi push thành công
-- **Status option `Scheduled`** — thêm vào Single Select (hiện có: Draft/Editing/Approved/Done)
+Content Queue table:
+- **Field `Buffer ID`** (Single line text) — lưu `ig:{media_id}` sau khi publish thành công (reuse field cũ cho dedup)
+- **Status option `Scheduled`** — thêm vào Single Select
 
-Status flow sau khi có Buffer:
+Status flow:
 ```
-Approved → (n8n Buffer Publisher) → Scheduled → (manual) → Done
+Approved → (n8n Instagram Publisher) → Scheduled → (manual) → Done
 ```
 
 ---
 
-## Caption & Link
+## Caption & Image
 
 **Caption:** `{Draft VN}\n\n{Draft EN}`  
 - Nếu cả 2 trống → skip item, log warning  
-- Không truncate — Buffer tự handle nếu quá dài
 
-**Link:** `Affiliate link` (ưu tiên) → fallback `URL` từ Raw Item linked record → fallback empty string
+**Image:** Cloudinary URL từ `Image URL` field.
+- Complex transformation URLs (text overlay tiếng Việt) → strip thành clean URL chỉ với `c_fill,w_1080,h_1080`
+- Instagram yêu cầu JPEG, 1080x1080, public URL
 
 ---
 
@@ -95,11 +100,12 @@ Approved → (n8n Buffer Publisher) → Scheduled → (manual) → Done
 
 | Lỗi | Behavior |
 |-----|----------|
-| Buffer API 429 | Sleep 5s, retry 1 lần |
-| Buffer API error khác | Log error, đếm vào `errors`, tiếp tục item tiếp |
-| Item không có caption | Skip item, log warning, không đếm vào `errors` |
-| `BUFFER_ACCESS_TOKEN` không set | Raise `RuntimeError` khi khởi tạo |
-| `BUFFER_TIKTOK_PROFILE_ID` hoặc `BUFFER_INSTAGRAM_PROFILE_ID` không set | Raise `RuntimeError` khi khởi tạo |
+| Instagram API 400 | Log error chi tiết, tiếp tục item tiếp |
+| Token hết hạn | Auto-refresh trước khi publish |
+| Token refresh fail | Log warning, dùng token cũ |
+| Item không có caption | Skip item, log warning |
+| Item không có image | Skip item, log warning |
+| `INSTAGRAM_ACCESS_TOKEN` không set | Raise `RuntimeError` khi khởi tạo |
 
 **Không fail toàn run khi 1 item lỗi** — xử lý được bao nhiêu tốt bấy nhiêu.
 
@@ -107,20 +113,19 @@ Approved → (n8n Buffer Publisher) → Scheduled → (manual) → Done
 
 ## Environment Variables
 
-Thêm vào `.env`:
 ```
-BUFFER_ACCESS_TOKEN=...
-BUFFER_TIKTOK_PROFILE_ID=...
-BUFFER_INSTAGRAM_PROFILE_ID=...
+INSTAGRAM_APP_ID=4504736839853185
+INSTAGRAM_APP_SECRET=...
+INSTAGRAM_USER_ID=27052054527731009
+INSTAGRAM_ACCESS_TOKEN=... (auto-refreshed, 60 ngày)
 ```
 
 ---
 
 ## Constraints
 
-- Buffer free tier: 3 social accounts, 10 scheduled posts/account — đủ cho MVP
-- Push TikTok + Instagram = 2 Buffer updates mỗi Content Queue item
-- `limit=20` mỗi run — tránh flood Buffer queue
-- Không retry nếu Airtable update fail sau khi Buffer push thành công (chấp nhận orphan: item được schedule nhưng Status vẫn Approved → lần poll sau sẽ try push lại, Buffer sẽ có duplicate)
-
-**Workaround duplicate:** Lưu `Buffer ID` trước khi update Status. Nếu item đã có Buffer ID → skip. Cần check `Buffer ID` trống làm điều kiện query chứ không phải chỉ `Status=Approved`.
+- Instagram cho phép 50 posts/24h — `limit=20` mỗi run
+- Long-lived token hết hạn sau 60 ngày — auto-refresh mỗi lần publish
+- Container cần ~3s để process trước khi publish
+- Cloudinary text overlay URLs không hoạt động với Instagram API → cần strip transformations
+- Dedup: lưu `ig:{media_id}` vào `Buffer ID` field trước khi update Status

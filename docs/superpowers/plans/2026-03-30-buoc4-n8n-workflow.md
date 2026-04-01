@@ -1,6 +1,6 @@
 # Bước 4: n8n Workflow Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Deploy curator-api (Python Flask) và n8n (Docker) lên Render, kết nối pipeline scraper→AI→ContentQueue tự động với Telegram notification.
 
@@ -32,7 +32,7 @@ render-n8n.yaml      CREATE  deploy config cho n8n
 - Create: `scraper/server.py`
 - Modify: `scraper/requirements.txt`
 
-- [ ] **Step 1: Thêm flask và gunicorn vào requirements.txt**
+- [x] **Step 1: Thêm flask và gunicorn vào requirements.txt**
 
 ```
 feedparser==6.0.11
@@ -45,7 +45,7 @@ flask==3.0.3
 gunicorn==22.0.0
 ```
 
-- [ ] **Step 2: Tạo scraper/server.py với /health và /run-rss**
+- [x] **Step 2: Tạo scraper/server.py với /health và /run-rss**
 
 ```python
 import logging
@@ -113,7 +113,7 @@ if __name__ == "__main__":
     app.run(host="0.0.0.0", port=port)
 ```
 
-- [ ] **Step 3: Test /health locally**
+- [x] **Step 3: Test /health locally**
 
 ```bash
 cd scraper
@@ -125,7 +125,7 @@ curl http://localhost:8000/health
 kill %1
 ```
 
-- [ ] **Step 4: Test /run-rss locally (no auth)**
+- [x] **Step 4: Test /run-rss locally (no auth)**
 
 ```bash
 cd scraper
@@ -143,7 +143,7 @@ kill %1
 **Files:**
 - Modify: `scraper/server.py`
 
-- [ ] **Step 1: Thêm 2 endpoints còn lại vào server.py**
+- [x] **Step 1: Thêm 2 endpoints còn lại vào server.py**
 
 Thêm sau hàm `run_rss()`:
 
@@ -180,7 +180,7 @@ def run_ai_processor():
         return jsonify({"error": str(e)}), 500
 ```
 
-- [ ] **Step 2: Test /run-ai-processor locally**
+- [x] **Step 2: Test /run-ai-processor locally**
 
 ```bash
 cd scraper
@@ -199,7 +199,7 @@ kill %1
 **Files:**
 - Create: `render.yaml`
 
-- [ ] **Step 1: Tạo render.yaml**
+- [x] **Step 1: Tạo render.yaml**
 
 ```yaml
 services:
@@ -228,11 +228,11 @@ Lưu ý `--timeout 600` vì Facebook pipeline có thể chạy đến 10 phút.
 
 **Files:** không có file mới — thao tác qua Render dashboard + dev-browser
 
-- [ ] **Step 1: Login Render qua dev-browser**
+- [x] **Step 1: Login Render qua dev-browser**
 
 Dùng dev-browser navigate tới `https://dashboard.render.com`, login với `issac.nguyen87@gmail.com` / `killeR@21`.
 
-- [ ] **Step 2: Tạo Web Service mới**
+- [x] **Step 2: Tạo Web Service mới**
 
 - Click "New" → "Web Service"
 - Connect GitHub repo hoặc "Deploy from existing code"
@@ -246,7 +246,7 @@ git commit -m "feat: curator-nhatrang pipeline bước 1-4"
 gh repo create curator-nhatrang --private --push --source=.
 ```
 
-- [ ] **Step 3: Cấu hình Web Service trên Render**
+- [x] **Step 3: Cấu hình Web Service trên Render**
 
 Điền vào form:
 - Name: `curator-api`
@@ -255,7 +255,7 @@ gh repo create curator-nhatrang --private --push --source=.
 - Start Command: `gunicorn server:app --bind 0.0.0.0:$PORT --timeout 600 --workers 1`
 - Instance Type: Free
 
-- [ ] **Step 4: Thêm Environment Variables trên Render**
+- [x] **Step 4: Thêm Environment Variables trên Render**
 
 Vào tab "Environment" của service, thêm:
 - `AIRTABLE_TOKEN` = (lấy từ .env local)
@@ -263,7 +263,7 @@ Vào tab "Environment" của service, thêm:
 - `GROQ_API_KEY` = (lấy từ .env local)
 - `API_SECRET_KEY` = (generate random: `openssl rand -hex 16`)
 
-- [ ] **Step 5: Verify deploy thành công**
+- [x] **Step 5: Verify deploy thành công**
 
 ```bash
 # Sau khi deploy xong (2-3 phút)
@@ -277,17 +277,17 @@ curl https://curator-api.onrender.com/health
 
 **Files:** không có file — thao tác qua Neon dashboard
 
-- [ ] **Step 1: Tạo Neon account và database**
+- [x] **Step 1: Tạo Neon account và database**
 
 Navigate tới `https://console.neon.tech`, signup với `issac.nguyen87@gmail.com`.
 
-- [ ] **Step 2: Tạo project mới**
+- [x] **Step 2: Tạo project mới**
 
 - Project name: `curator-nhatrang`
 - Region: Singapore (gần nhất với VN)
 - Database name: `n8n`
 
-- [ ] **Step 3: Lấy connection string**
+- [x] **Step 3: Lấy connection string**
 
 Từ Neon dashboard → Connection Details → copy "Connection string" dạng:
 ```
@@ -306,7 +306,7 @@ NEON_DATABASE_URL=postgresql://...
 **Files:**
 - Create: `n8n/Dockerfile`
 
-- [ ] **Step 1: Tạo n8n/Dockerfile**
+- [x] **Step 1: Tạo n8n/Dockerfile**
 
 ```dockerfile
 FROM n8nio/n8n:latest
@@ -318,7 +318,7 @@ USER node
 EXPOSE 5678
 ```
 
-- [ ] **Step 2: Tạo render-n8n.yaml**
+- [x] **Step 2: Tạo render-n8n.yaml**
 
 ```yaml
 services:
@@ -366,14 +366,14 @@ services:
 
 ## Task 7: Deploy n8n lên Render
 
-- [ ] **Step 1: Tạo Web Service mới trên Render**
+- [x] **Step 1: Tạo Web Service mới trên Render**
 
 - Name: `curator-n8n`
 - Runtime: Docker
 - Dockerfile Path: `n8n/Dockerfile`
 - Instance Type: Free
 
-- [ ] **Step 2: Thêm Environment Variables**
+- [x] **Step 2: Thêm Environment Variables**
 
 Parse connection string từ Neon: `postgresql://USER:PASSWORD@HOST/n8n?sslmode=require`
 
@@ -386,7 +386,7 @@ Parse connection string từ Neon: `postgresql://USER:PASSWORD@HOST/n8n?sslmode=
 - `N8N_HOST` = `curator-n8n.onrender.com`
 - `WEBHOOK_URL` = `https://curator-n8n.onrender.com/`
 
-- [ ] **Step 3: Verify n8n chạy**
+- [x] **Step 3: Verify n8n chạy**
 
 ```bash
 curl https://curator-n8n.onrender.com/healthz
@@ -399,7 +399,7 @@ Mở browser tới `https://curator-n8n.onrender.com`, đăng nhập bằng `adm
 
 ## Task 8: Tạo Telegram Bot
 
-- [ ] **Step 1: Tạo bot qua BotFather**
+- [x] **Step 1: Tạo bot qua BotFather**
 
 Mở Telegram → tìm `@BotFather` → `/newbot`
 - Name: `Curator Nha Trang`
@@ -407,7 +407,7 @@ Mở Telegram → tìm `@BotFather` → `/newbot`
 
 Lưu token vào `.env`: `TELEGRAM_BOT_TOKEN=...`
 
-- [ ] **Step 2: Lấy chat_id**
+- [x] **Step 2: Lấy chat_id**
 
 ```bash
 # Gửi 1 tin nhắn bất kỳ cho bot, rồi:
@@ -416,7 +416,7 @@ curl "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates"
 # Lưu vào .env: TELEGRAM_CHAT_ID=XXXXX
 ```
 
-- [ ] **Step 3: Test gửi tin nhắn**
+- [x] **Step 3: Test gửi tin nhắn**
 
 ```bash
 curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -432,36 +432,36 @@ Thực hiện qua n8n UI tại `https://curator-n8n.onrender.com`.
 
 ### Workflow 1: RSS Pipeline (7am daily)
 
-- [ ] **Step 1: Tạo workflow mới, đặt tên "RSS Pipeline"**
+- [x] **Step 1: Tạo workflow mới, đặt tên "RSS Pipeline"**
 
-- [ ] **Step 2: Thêm Schedule Trigger node**
+- [x] **Step 2: Thêm Schedule Trigger node**
   - Cron expression: `0 0 * * *` (7am GMT+7 = 0am UTC)
 
-- [ ] **Step 3: Thêm HTTP Request node — /run-rss**
+- [x] **Step 3: Thêm HTTP Request node — /run-rss**
   - Method: POST
   - URL: `https://curator-api.onrender.com/run-rss`
   - Headers: `X-API-Key: {{$env.API_SECRET_KEY}}`
   - Timeout: 120000ms
 
-- [ ] **Step 4: Thêm HTTP Request node — /run-ai-processor**
+- [x] **Step 4: Thêm HTTP Request node — /run-ai-processor**
   - Method: POST
   - URL: `https://curator-api.onrender.com/run-ai-processor`
   - Headers: `X-API-Key: {{$env.API_SECRET_KEY}}`
   - Timeout: 300000ms
 
-- [ ] **Step 5: Thêm Airtable node — List Raw Items (Use, no queue)**
+- [x] **Step 5: Thêm Airtable node — List Raw Items (Use, no queue)**
   - Operation: List
   - Base ID: `app8VMuhpjzSw25YF`
   - Table ID: `tblNZkO6qjwTHOcAk`
   - Filter: `AND(Status='Use', {Content Queue}=BLANK())`
   - Max Records: 20
 
-- [ ] **Step 6: Thêm IF node — có items không?**
+- [x] **Step 6: Thêm IF node — có items không?**
   - Condition: `{{$json.length}} > 0`
 
-- [ ] **Step 7: Thêm Loop Over Items node**
+- [x] **Step 7: Thêm Loop Over Items node**
 
-- [ ] **Step 8: Thêm HTTP Request node — Groq API (trong loop)**
+- [x] **Step 8: Thêm HTTP Request node — Groq API (trong loop)**
   - Method: POST
   - URL: `https://api.groq.com/openai/v1/chat/completions`
   - Headers: `Authorization: Bearer {{$env.GROQ_API_KEY}}`
@@ -484,7 +484,7 @@ Thực hiện qua n8n UI tại `https://curator-n8n.onrender.com`.
   }
   ```
 
-- [ ] **Step 9: Thêm Code node — parse Groq response**
+- [x] **Step 9: Thêm Code node — parse Groq response**
   ```javascript
   const text = $input.first().json.choices[0].message.content.trim();
   let captions;
@@ -497,7 +497,7 @@ Thực hiện qua n8n UI tại `https://curator-n8n.onrender.com`.
   return [{ json: captions }];
   ```
 
-- [ ] **Step 10: Thêm Airtable node — Create Content Queue**
+- [x] **Step 10: Thêm Airtable node — Create Content Queue**
   - Operation: Create
   - Table ID: `tblwjOxiCWhUEoKEP`
   - Fields:
@@ -508,57 +508,57 @@ Thực hiện qua n8n UI tại `https://curator-n8n.onrender.com`.
     - `Status`: `Draft`
     - `Platform`: `["TikTok","Instagram"]`
 
-- [ ] **Step 11: Thêm Wait node — 2 giây (rate limit)**
+- [x] **Step 11: Thêm Wait node — 2 giây (rate limit)**
 
-- [ ] **Step 12: Thêm Telegram node (sau loop)**
+- [x] **Step 12: Thêm Telegram node (sau loop)**
   - Operation: Send Message
   - Chat ID: `{{$env.TELEGRAM_CHAT_ID}}`
   - Text: `✅ RSS Pipeline xong!\n📋 {{$('Airtable - List').item.json.length}} items → Content Queue\n🕐 {{new Date().toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}}`
 
-- [ ] **Step 13: Add credentials vào n8n**
+- [x] **Step 13: Add credentials vào n8n**
   - Groq: API Key env var `GROQ_API_KEY`
   - Telegram: Bot Token env var `TELEGRAM_BOT_TOKEN`
   - Airtable: Personal Access Token env var `AIRTABLE_TOKEN`
 
-- [ ] **Step 14: Activate workflow và test manual run**
+- [x] **Step 14: Activate workflow và test manual run**
 
 ### Workflow 2: Facebook Pipeline (8am Mon/Wed/Fri)
 
-- [ ] **Step 1: Duplicate Workflow 1, đổi tên thành "Facebook Pipeline"**
+- [x] **Step 1: Duplicate Workflow 1, đổi tên thành "Facebook Pipeline"**
 
-- [ ] **Step 2: Sửa Schedule Trigger**
+- [x] **Step 2: Sửa Schedule Trigger**
   - Cron: `0 1 * * 1,3,5` (8am GMT+7 = 1am UTC, Mon/Wed/Fri)
 
-- [ ] **Step 3: Sửa HTTP Request node đầu tiên**
+- [x] **Step 3: Sửa HTTP Request node đầu tiên**
   - URL: `https://curator-api.onrender.com/run-facebook`
   - Timeout: 600000ms (10 phút vì Apify cần thời gian)
 
-- [ ] **Step 4: Sửa Telegram message**
+- [x] **Step 4: Sửa Telegram message**
   - Text: `✅ Facebook Pipeline xong!\n📋 {{$('Airtable - List').item.json.length}} items → Content Queue\n🕐 {{new Date().toLocaleString('vi-VN', {timeZone: 'Asia/Ho_Chi_Minh'})}}`
 
-- [ ] **Step 5: Activate và test manual run**
+- [x] **Step 5: Activate và test manual run**
 
 ---
 
 ## Task 10: UptimeRobot setup
 
-- [ ] **Step 1: Tạo UptimeRobot account**
+- [x] **Step 1: Tạo UptimeRobot account**
 
 Navigate tới `https://uptimerobot.com`, signup với `issac.nguyen87@gmail.com` / `killeR@21`.
 
-- [ ] **Step 2: Tạo monitor cho curator-api**
+- [x] **Step 2: Tạo monitor cho curator-api**
   - Monitor Type: HTTP(s)
   - Friendly Name: `curator-api`
   - URL: `https://curator-api.onrender.com/health`
   - Monitoring Interval: 10 minutes
 
-- [ ] **Step 3: Tạo monitor cho curator-n8n**
+- [x] **Step 3: Tạo monitor cho curator-n8n**
   - Monitor Type: HTTP(s)
   - Friendly Name: `curator-n8n`
   - URL: `https://curator-n8n.onrender.com/healthz`
   - Monitoring Interval: 10 minutes
 
-- [ ] **Step 4: Verify monitors active**
+- [x] **Step 4: Verify monitors active**
 
 Kiểm tra dashboard UptimeRobot: cả 2 monitors đều "Up" (màu xanh).
 
@@ -566,11 +566,11 @@ Kiểm tra dashboard UptimeRobot: cả 2 monitors đều "Up" (màu xanh).
 
 ## Task 11: End-to-end test
 
-- [ ] **Step 1: Trigger RSS Pipeline manually trong n8n**
+- [x] **Step 1: Trigger RSS Pipeline manually trong n8n**
 
 Vào n8n UI → RSS Pipeline → "Execute Workflow" → quan sát logs.
 
-- [ ] **Step 2: Kiểm tra Airtable Content Queue**
+- [x] **Step 2: Kiểm tra Airtable Content Queue**
 
 ```bash
 cd scraper && source venv/bin/activate
@@ -587,17 +587,14 @@ for r in records:
 " 2>&1 | grep -v INFO
 ```
 
-- [ ] **Step 3: Kiểm tra Telegram**
+- [x] **Step 3: Kiểm tra Telegram**
 
 Phải nhận được tin nhắn "✅ RSS Pipeline xong!" trong Telegram.
 
-- [ ] **Step 4: Update PROCESS.md**
+- [x] **Step 4: Xác nhận hoàn tất**
 
-```
-- [x] Bước 4: n8n workflow
-      curator-api: https://curator-api.onrender.com
-      curator-n8n: https://curator-n8n.onrender.com
-      UptimeRobot: 2 monitors active
-      Workflows: RSS Pipeline (7am daily), Facebook Pipeline (8am Mon/Wed/Fri)
-      Hoàn thành: 30/3/2026
-```
+Kiểm tra tất cả services đang chạy:
+- curator-api: https://curator-api.onrender.com
+- curator-n8n: https://curator-n8n.onrender.com
+- UptimeRobot: 2 monitors active
+- Workflows: RSS Pipeline (7am daily), Facebook Pipeline (8am Mon/Wed/Fri)

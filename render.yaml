@@ -14,11 +14,13 @@ services:
         sync: false
       - key: API_SECRET_KEY
         sync: false
-      - key: BUFFER_ACCESS_TOKEN
+      - key: INSTAGRAM_APP_ID
         sync: false
-      - key: BUFFER_TIKTOK_PROFILE_ID
+      - key: INSTAGRAM_APP_SECRET
         sync: false
-      - key: BUFFER_INSTAGRAM_PROFILE_ID
+      - key: INSTAGRAM_USER_ID
+        sync: false
+      - key: INSTAGRAM_ACCESS_TOKEN
         sync: false
       - key: PEXELS_API_KEY
         sync: false

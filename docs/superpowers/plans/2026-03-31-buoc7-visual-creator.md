@@ -1,10 +1,10 @@
 # Bước 7: Visual Creator — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
-**Goal:** Tự động tạo ảnh branded từ Pexels + Cloudinary transformations cho Content Queue items, update Airtable Image URL, Buffer dùng URL đó để đăng TikTok/Instagram.
+**Goal:** Tự động tạo ảnh branded từ Pexels + Cloudinary transformations cho Content Queue items, update Airtable Image URL, Instagram Publisher dùng URL đó để đăng.
 
-**Architecture:** Fetch ảnh Pexels gốc → upload lên Cloudinary → build Cloudinary transformation URL (crop + dark overlay + text layers) → lưu URL vào Airtable. Buffer Publisher update để dùng Image URL khi post.
+**Architecture:** Fetch ảnh Pexels gốc → upload lên Cloudinary → build Cloudinary transformation URL (crop + dark overlay + text layers) → lưu URL vào Airtable. Instagram Publisher dùng Image URL (clean, strip overlay) để publish.
 
 **Tech Stack:** Python, cloudinary SDK, requests (Pexels API), AirtableClient (existing), Flask (existing).
 
@@ -16,7 +16,7 @@
 |------|--------|----------------|
 | `scraper/visual_creator.py` | Create | VisualCreator class: fetch Pexels, upload Cloudinary, build URL |
 | `scraper/server.py` | Modify | Add `/run-visual` endpoint |
-| `scraper/buffer_publisher.py` | Modify | Filter by Image URL, send media[picture] |
+| `scraper/instagram_publisher.py` | Modify | Clean Image URL (strip overlay), publish via Instagram API |
 | `scraper/requirements.txt` | Modify | Add `cloudinary>=1.36.0` |
 | `render.yaml` | Modify | Add PEXELS_API_KEY, CLOUDINARY_* env vars |
 
@@ -27,7 +27,7 @@
 **Files:**
 - No file changes — gọi Airtable Metadata API trực tiếp qua curl
 
-- [ ] **Step 1: Kiểm tra field `Image URL` đã tồn tại chưa**
+- [x] **Step 1: Kiểm tra field `Image URL` đã tồn tại chưa**
 
 ```bash
 curl -s "https://api.airtable.com/v0/meta/bases/app8VMuhpjzSw25YF/tables" \
@@ -44,7 +44,7 @@ print('Has Image URL:', 'Image URL' in fields)
 
 Expected: `Has Image URL: False` (nếu chưa có)
 
-- [ ] **Step 2: Tạo field `Image URL`**
+- [x] **Step 2: Tạo field `Image URL`**
 
 ```bash
 curl -s -X POST "https://api.airtable.com/v0/meta/bases/app8VMuhpjzSw25YF/tables/tblwjOxiCWhUEoKEP/fields" \
@@ -55,7 +55,7 @@ curl -s -X POST "https://api.airtable.com/v0/meta/bases/app8VMuhpjzSw25YF/tables
 
 Expected: JSON response với `"name": "Image URL"` và `"type": "url"`
 
-- [ ] **Step 3: Verify field tồn tại**
+- [x] **Step 3: Verify field tồn tại**
 
 Chạy lại lệnh Step 1, expected: `Has Image URL: True`
 
@@ -67,7 +67,7 @@ Chạy lại lệnh Step 1, expected: `Has Image URL: True`
 - Modify: `scraper/requirements.txt`
 - Modify: `render.yaml`
 
-- [ ] **Step 1: Thêm cloudinary vào requirements.txt**
+- [x] **Step 1: Thêm cloudinary vào requirements.txt**
 
 File `scraper/requirements.txt` sau khi sửa:
 
@@ -83,7 +83,7 @@ gunicorn==22.0.0
 cloudinary>=1.36.0
 ```
 
-- [ ] **Step 2: Thêm env vars vào render.yaml**
+- [x] **Step 2: Thêm env vars vào render.yaml**
 
 File `render.yaml` sau khi sửa (thêm 4 keys vào envVars):
 
@@ -104,11 +104,11 @@ services:
         sync: false
       - key: API_SECRET_KEY
         sync: false
-      - key: BUFFER_ACCESS_TOKEN
+      - key: INSTAGRAM_ACCESS_TOKEN
         sync: false
-      - key: BUFFER_TIKTOK_PROFILE_ID
+      - key: INSTAGRAM_USER_ID
         sync: false
-      - key: BUFFER_INSTAGRAM_PROFILE_ID
+      - key: INSTAGRAM_APP_SECRET
         sync: false
       - key: PEXELS_API_KEY
         sync: false
@@ -120,7 +120,7 @@ services:
         sync: false
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scraper/requirements.txt render.yaml
@@ -134,7 +134,7 @@ git commit -m "feat: add cloudinary dep and env vars for visual creator"
 **Files:**
 - Create: `scraper/visual_creator.py`
 
-- [ ] **Step 1: Tạo file với skeleton và test `_extract_text_parts`**
+- [x] **Step 1: Tạo file với skeleton và test `_extract_text_parts`**
 
 Tạo file `scraper/tests_visual.py` để test pure functions:
 
@@ -175,7 +175,7 @@ print(f"✓ Test 3 passed: URL starts correctly")
 print("\n✅ All tests passed")
 ```
 
-- [ ] **Step 2: Chạy test — phải fail (file chưa tồn tại)**
+- [x] **Step 2: Chạy test — phải fail (file chưa tồn tại)**
 
 ```bash
 python scraper/tests_visual.py
@@ -183,7 +183,7 @@ python scraper/tests_visual.py
 
 Expected: `ModuleNotFoundError: No module named 'visual_creator'`
 
-- [ ] **Step 3: Tạo `scraper/visual_creator.py`**
+- [x] **Step 3: Tạo `scraper/visual_creator.py`**
 
 ```python
 """
@@ -443,7 +443,7 @@ if __name__ == "__main__":
     print(stats)
 ```
 
-- [ ] **Step 4: Chạy tests — phải pass**
+- [x] **Step 4: Chạy tests — phải pass**
 
 ```bash
 python scraper/tests_visual.py
@@ -457,7 +457,7 @@ Expected:
 ✅ All tests passed
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scraper/visual_creator.py scraper/tests_visual.py
@@ -471,7 +471,7 @@ git commit -m "feat: add VisualCreator class with Pexels + Cloudinary transforms
 **Files:**
 - Modify: `scraper/server.py`
 
-- [ ] **Step 1: Thêm endpoint sau `/run-newsletter`**
+- [x] **Step 1: Thêm endpoint sau `/run-newsletter`**
 
 Trong `scraper/server.py`, thêm sau block `run_newsletter`:
 
@@ -492,7 +492,7 @@ def run_visual():
         return jsonify({"error": str(e)}), 500
 ```
 
-- [ ] **Step 2: Test endpoint locally**
+- [x] **Step 2: Test endpoint locally**
 
 ```bash
 cd /Users/phatnguyen/Projects/curator-nhatrang
@@ -510,7 +510,7 @@ with app.test_client() as c:
 
 Expected: `health: {'status': 'ok'}` và `run-visual status: 500` (endpoint exists, fails because no env vars locally)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scraper/server.py
@@ -519,140 +519,31 @@ git commit -m "feat: add /run-visual endpoint"
 
 ---
 
-## Task 5: Update Buffer Publisher dùng Image URL
+## Task 5: Instagram Publisher dùng Image URL
 
-**Files:**
-- Modify: `scraper/buffer_publisher.py`
+**Note:** Đã chuyển từ Buffer sang Instagram Graph API (2026-04-01). Xem `scraper/instagram_publisher.py`.
 
-- [ ] **Step 1: Update `push_pending_items` filter**
+- [x] **Step 1: InstagramPublisher clean Image URL**
 
-Trong `push_pending_items`, thay filter formula:
+`_get_clean_image_url()` strip Cloudinary text overlay → URL đơn giản `c_fill,w_1080,h_1080/{public_id}.jpg`.
 
-```python
-# Cũ:
-filter_formula='AND({Status}="Approved", {Buffer ID}="")',
+- [x] **Step 2: Publish qua Instagram Graph API**
 
-# Mới:
-filter_formula='AND({Status}="Approved", {Buffer ID}="", {Image URL}!="")',
-```
+`_publish_photo()`: create container → wait 3s → publish. Lưu `ig:{media_id}` vào `Buffer ID` field.
 
-- [ ] **Step 2: Update `_push_to_buffer` để gửi media[picture]**
+- [x] **Step 3: Auto-refresh token**
 
-Thay toàn bộ method `_push_to_buffer`:
+`_refresh_token_if_needed()` tự refresh long-lived token (60 ngày) và cập nhật `.env`.
 
-```python
-def _push_to_buffer(self, text: str, link: str, image_url: str = "") -> str:
-    """
-    Push update lên Buffer với ảnh.
-    Gửi cả TikTok + Instagram với media[picture] = image_url.
-    Retry 1 lần nếu gặp 429.
-    Return Buffer update ID.
-    """
-    profile_ids = [BUFFER_TIKTOK_PROFILE_ID, BUFFER_INSTAGRAM_PROFILE_ID]
-    for attempt in range(2):
-        data = {
-            "access_token": BUFFER_ACCESS_TOKEN,
-            "text": text,
-            "profile_ids[]": profile_ids,
-            "shorten": "false",
-        }
-        if link:
-            data["media[link]"] = link
-        if image_url:
-            data["media[picture]"] = image_url
-
-        resp = requests.post(f"{BUFFER_API_BASE}/updates/create.json", data=data)
-        if resp.status_code == 429:
-            log.warning("Buffer rate limit, sleeping 5s...")
-            time.sleep(5)
-            continue
-        if resp.status_code == 400:
-            result = resp.json()
-            if len(profile_ids) > 1:
-                log.warning(f"Both profiles failed ({result.get('message','')}), retrying TikTok only...")
-                profile_ids = [BUFFER_TIKTOK_PROFILE_ID]
-                continue
-            raise RuntimeError(f"Buffer 400: {result.get('message', result)}")
-        resp.raise_for_status()
-        result = resp.json()
-        updates = result.get("updates", [])
-        if not updates:
-            raise RuntimeError(f"Buffer returned no updates: {result}")
-        buffer_id = updates[0].get("id")
-        if not buffer_id:
-            raise RuntimeError(f"Buffer update missing id: {updates[0]}")
-        return buffer_id
-
-    raise RuntimeError("Buffer API rate limit exceeded after retry")
-```
-
-- [ ] **Step 3: Update `push_pending_items` để pass image_url**
-
-Trong `push_pending_items`, thay dòng gọi `_push_to_buffer`:
-
-```python
-# Thêm lấy image_url từ record
-image_url = record["fields"].get("Image URL", "").strip()
-
-# ...
-
-# Cũ:
-buffer_id = self._push_to_buffer(caption, link)
-
-# Mới:
-buffer_id = self._push_to_buffer(caption, link, image_url)
-```
-
-Đoạn code đầy đủ của `push_pending_items` sau khi sửa:
-
-```python
-def push_pending_items(self, limit: int = 20) -> dict:
-    log.info("Fetching Content Queue items with Status=Approved, no Buffer ID, has Image URL...")
-    records = self.client.get_records(
-        "contentQueue",
-        filter_formula='AND({Status}="Approved", {Buffer ID}="", {Image URL}!="")',
-        max_records=limit,
-    )
-    log.info(f"Found {len(records)} items to push to Buffer")
-
-    stats = {"pushed": 0, "skipped": 0, "errors": 0}
-
-    for record in records:
-        record_id = record["id"]
-        title = record["fields"].get("Title", "")[:50]
-
-        caption = self._build_caption(record)
-        if not caption:
-            log.warning(f"  [Skip] {title} — no caption")
-            stats["skipped"] += 1
-            continue
-
-        link = self._get_link(record)
-        image_url = record["fields"].get("Image URL", "").strip()
-
-        try:
-            buffer_id = self._push_to_buffer(caption, link, image_url)
-            self.client.update_record("contentQueue", record_id, {
-                "Buffer ID": buffer_id,
-            })
-            self.client.update_record("contentQueue", record_id, {
-                "Status": "Scheduled",
-            })
-            log.info(f"  [Pushed] {title} → Buffer ID: {buffer_id}")
-            stats["pushed"] += 1
-        except Exception as e:
-            log.error(f"  [Error] {title}: {e}")
-            stats["errors"] += 1
-
-    log.info(f"Buffer push complete: {stats}")
-    return stats
-```
-
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Test publish với ảnh**
 
 ```bash
-git add scraper/buffer_publisher.py
-git commit -m "feat: buffer publisher uses Image URL for media attachment"
+cd scraper && python3 -c "
+from instagram_publisher import InstagramPublisher
+publisher = InstagramPublisher()
+stats = publisher.push_pending_items(limit=1)
+print(stats)
+"
 ```
 
 ---
@@ -662,7 +553,7 @@ git commit -m "feat: buffer publisher uses Image URL for media attachment"
 **Files:**
 - No file changes — gọi Render API
 
-- [ ] **Step 1: Update env vars trên Render**
+- [x] **Step 1: Update env vars trên Render**
 
 ```bash
 python3 << 'PYEOF'
@@ -707,7 +598,7 @@ PYEOF
 
 Expected: `Status: 200` và `OK`
 
-- [ ] **Step 2: Trigger redeploy**
+- [x] **Step 2: Trigger redeploy**
 
 ```bash
 python3 << 'PYEOF'
@@ -733,7 +624,7 @@ PYEOF
 
 Expected: `Deploy status: 201` và deploy ID
 
-- [ ] **Step 3: Commit render.yaml**
+- [x] **Step 3: Commit render.yaml**
 
 ```bash
 git add render.yaml
@@ -747,7 +638,7 @@ git commit -m "chore: add Pexels and Cloudinary env vars to render.yaml"
 **Files:**
 - No changes
 
-- [ ] **Step 1: Đợi Render deploy xong (~3-5 phút)**
+- [x] **Step 1: Đợi Render deploy xong (~3-5 phút)**
 
 ```bash
 python3 << 'PYEOF'
@@ -770,7 +661,7 @@ PYEOF
 
 Expected: `Health: {'status': 'ok'}`
 
-- [ ] **Step 2: Chạy `/run-visual` thật**
+- [x] **Step 2: Chạy `/run-visual` thật**
 
 ```bash
 python3 << 'PYEOF'
@@ -796,13 +687,13 @@ Expected: `{"processed": N, "skipped": M, "errors": 0}`
 
 Nếu processed=0 và skipped=0: kiểm tra Airtable Content Queue có item nào Status=Approved không.
 
-- [ ] **Step 3: Kiểm tra Image URL trong Airtable**
+- [x] **Step 3: Kiểm tra Image URL trong Airtable**
 
 Vào Airtable → Content Queue → tìm item vừa processed → copy Image URL → mở trong browser.
 
 Expected: Ảnh 1080×1080 với text overlay hiển thị đúng.
 
-- [ ] **Step 4: Chạy `/run-buffer` với ảnh**
+- [x] **Step 4: Chạy `/run-instagram` với ảnh**
 
 ```bash
 python3 << 'PYEOF'
@@ -816,7 +707,7 @@ for line in Path(".env").read_text().splitlines():
         env[k.strip()] = v.strip()
 
 resp = requests.post(
-    f"{env['CURATOR_API_URL']}/run-buffer",
+    f"{env['CURATOR_API_URL']}/run-instagram",
     headers={"X-API-Key": env["API_SECRET_KEY"]},
 )
 print("Status:", resp.status_code)
@@ -833,25 +724,25 @@ Expected: `{"pushed": N, "skipped": 0, "errors": 0}` và item Status=Scheduled t
 **Files:**
 - n8n workflow (qua n8n UI tại https://curator-n8n.onrender.com)
 
-- [ ] **Step 1: Mở n8n và edit workflow hiện tại**
+- [x] **Step 1: Mở n8n và edit workflow hiện tại**
 
-Vào https://curator-n8n.onrender.com → Workflows → mở workflow có `/run-buffer` node.
+Vào https://curator-n8n.onrender.com → Workflows → mở workflow có `/run-instagram` node (trước đó là `/run-buffer`).
 
-- [ ] **Step 2: Thêm HTTP Request node `/run-visual`**
+- [x] **Step 2: Thêm HTTP Request node `/run-visual`**
 
-Thêm node mới **trước** node `/run-buffer`:
+Thêm node mới **trước** node `/run-instagram`:
 - Type: HTTP Request
 - Method: POST
 - URL: `{{$env.CURATOR_API_URL}}/run-visual` hoặc hardcode `https://curator-api-hhau.onrender.com/run-visual`
 - Headers: `X-API-Key: {{$env.API_SECRET_KEY}}`
-- Connect: node trước → `/run-visual` → `/run-buffer`
+- Connect: node trước → `/run-visual` → `/run-instagram`
 
-- [ ] **Step 3: Test workflow**
+- [x] **Step 3: Test workflow**
 
 Chạy manual trigger → kiểm tra tất cả nodes màu xanh.
 
-Expected: `/run-visual` node trả `{"processed": N, ...}`, rồi `/run-buffer` chạy tiếp.
+Expected: `/run-visual` node trả `{"processed": N, ...}`, rồi `/run-instagram` chạy tiếp.
 
-- [ ] **Step 4: Save và Activate workflow**
+- [x] **Step 4: Save và Activate workflow**
 
 Click Save → đảm bảo Active toggle ON.

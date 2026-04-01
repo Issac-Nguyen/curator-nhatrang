@@ -106,6 +106,38 @@ def run_buffer():
         return jsonify({"error": str(e)}), 500
 
 
+@app.post("/run-instagram")
+def run_instagram():
+    err = _check_auth()
+    if err:
+        return err
+    try:
+        from instagram_publisher import InstagramPublisher
+        publisher = InstagramPublisher()
+        stats = publisher.push_pending_items(limit=20)
+        log.info(f"/run-instagram: {stats}")
+        return jsonify(stats)
+    except Exception as e:
+        log.error(f"/run-instagram error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.post("/refresh-instagram-token")
+def refresh_instagram_token():
+    err = _check_auth()
+    if err:
+        return err
+    try:
+        from instagram_publisher import _refresh_token_if_needed
+        token = _refresh_token_if_needed()
+        masked = token[:10] + "..." + token[-5:] if len(token) > 20 else "***"
+        log.info(f"/refresh-instagram-token: token={masked}")
+        return jsonify({"status": "ok", "token_preview": masked})
+    except Exception as e:
+        log.error(f"/refresh-instagram-token error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.post("/run-newsletter")
 def run_newsletter():
     err = _check_auth()
