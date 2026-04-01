@@ -8,13 +8,12 @@ Logic:
   → lưu eager URL (ảnh JPEG đã render) vào Airtable
 - Không fail toàn run khi 1 item lỗi
 """
+import io
 import logging
 import os
+import re
 import time
 from pathlib import Path
-
-import io
-import tempfile
 
 import cloudinary
 import cloudinary.uploader
@@ -33,6 +32,16 @@ CLOUDINARY_API_KEY = os.getenv("CLOUDINARY_API_KEY")
 CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
 
 PEXELS_API_BASE = "https://api.pexels.com/v1"
+
+
+def _strip_emoji(text: str) -> str:
+    """Remove emoji characters that can't be rendered by standard fonts."""
+    return re.sub(
+        r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF'
+        r'\U0001F1E0-\U0001F1FF\U00002702-\U000027B0\U0001F900-\U0001F9FF'
+        r'\U0001FA00-\U0001FA6F\U0001FA70-\U0001FAFF\U00002600-\U000026FF'
+        r'\U0000FE0F\U0000200D]+', '', text
+    ).strip()
 
 
 def _draw_wrapped_text(draw, text, pos, font, fill, max_width):
@@ -232,48 +241,53 @@ class VisualCreator:
     def _render_text_overlay(img: Image.Image, title: str, caption: str) -> Image.Image:
         """
         Bottom gradient info card overlay:
-        - Gradient đen fade từ giữa xuống dưới
+        - Gradient đen fade nhẹ từ 60% xuống dưới
         - Brand "NHA TRANG CURATOR" (xanh lá)
-        - Title (trắng, bold)
-        - Caption/info (xám nhạt)
+        - Title (trắng, bold, max 2 dòng)
+        - Caption/info (xám nhạt, max 2 dòng)
         """
+        # Strip emoji (fonts can't render them → shows ▯▯)
+        title = _strip_emoji(title)
+        caption = _strip_emoji(caption)
+
         draw = ImageDraw.Draw(img, "RGBA")
         w, h = img.size
 
-        # Gradient overlay (bottom 50%)
-        for y in range(h // 2, h):
-            alpha = int(200 * (y - h // 2) / (h // 2))
+        # Gradient overlay (bottom 40%, nhẹ hơn)
+        for y in range(int(h * 0.6), h):
+            progress = (y - h * 0.6) / (h * 0.4)
+            alpha = int(180 * progress)
             draw.rectangle([(0, y), (w, y + 1)], fill=(0, 0, 0, alpha))
 
         # Load font (try system fonts, fallback to default)
         draw = ImageDraw.Draw(img)
         try:
-            font_brand = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 26)
-            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 38)
-            font_caption = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22)
+            font_brand = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
+            font_title = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 32)
+            font_caption = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
         except OSError:
             try:
-                font_brand = ImageFont.truetype("Arial Bold", 26)
-                font_title = ImageFont.truetype("Arial Bold", 38)
-                font_caption = ImageFont.truetype("Arial", 22)
+                font_brand = ImageFont.truetype("Arial Bold", 22)
+                font_title = ImageFont.truetype("Arial Bold", 32)
+                font_caption = ImageFont.truetype("Arial", 20)
             except OSError:
                 font_brand = ImageFont.load_default()
                 font_title = font_brand
                 font_caption = font_brand
 
-        margin = 50
+        margin = 40
 
         # Brand name
-        draw.text((margin, h - 280), "NHA TRANG CURATOR", fill="#2d9e6b", font=font_brand)
+        draw.text((margin, h - 230), "NHA TRANG CURATOR", fill="#2d9e6b", font=font_brand)
 
-        # Title (word wrap)
+        # Title (word wrap, max 2 lines)
         if title:
-            _draw_wrapped_text(draw, title[:55], (margin, h - 240), font_title,
+            _draw_wrapped_text(draw, title[:60], (margin, h - 200), font_title,
                                fill="white", max_width=w - 2 * margin)
 
-        # Caption
+        # Caption (max 2 lines)
         if caption:
-            _draw_wrapped_text(draw, caption[:110], (margin, h - 110), font_caption,
+            _draw_wrapped_text(draw, caption[:100], (margin, h - 100), font_caption,
                                fill="#cccccc", max_width=w - 2 * margin)
 
         return img
