@@ -118,12 +118,15 @@ class VisualCreator:
             try:
                 title, caption, hashtags = self._extract_text_parts(record)
                 category = record["fields"].get("Category", "")
-                keywords = title[:30]
 
-                # Priority: source image > Pexels
-                photo_url = self._get_source_image_url(record)
+                # Get source image + summary_en from Raw Item
+                source_img, summary_en = self._get_raw_item_data(record)
+
+                # Priority: source image > Pexels (with English keywords)
+                photo_url = source_img
                 if not photo_url:
-                    photo_url = self._get_pexels_photo_url(category, keywords)
+                    pexels_keywords = summary_en[:50] if summary_en else category
+                    photo_url = self._get_pexels_photo_url(pexels_keywords)
                     time.sleep(0.5)  # respect Pexels rate limit
 
                 public_id = f"nhatrang/{record_id}"
@@ -144,9 +147,9 @@ class VisualCreator:
         log.info(f"Visual creator complete: {stats}")
         return stats
 
-    def _get_pexels_photo_url(self, category: str, keywords: str) -> str | None:
-        """Search Pexels for a photo. Returns URL of largest size or None."""
-        query = f"{category} Nha Trang {keywords}".strip()
+    def _get_pexels_photo_url(self, keywords: str) -> str | None:
+        """Search Pexels for a photo using English keywords. Returns URL or None."""
+        query = f"Nha Trang {keywords}".strip()
         headers = {"Authorization": PEXELS_API_KEY}
         params = {"query": query, "per_page": 1, "orientation": "square"}
         try:
@@ -162,22 +165,40 @@ class VisualCreator:
             log.warning(f"Pexels fetch failed: {e}")
             return None
 
-    def _get_source_image_url(self, record: dict) -> str | None:
-        """Lấy Source Image URL từ Raw Item linked record."""
+    def _get_raw_item_data(self, record: dict) -> tuple[str | None, str]:
+        """
+        Lấy Source Image URL và summary_en từ Raw Item linked record.
+        Returns (image_url, summary_en).
+        """
         raw_item_ids = record["fields"].get("Raw Item", [])
         if not raw_item_ids:
-            return None
+            return None, ""
         raw_records = self.client.get_records(
             "rawItems",
             filter_formula=f'RECORD_ID()="{raw_item_ids[0]}"',
             max_records=1,
         )
         if not raw_records:
-            return None
-        url = raw_records[0]["fields"].get("Source Image URL", "").strip()
-        if url:
-            log.info(f"  Found source image: {url[:80]}...")
-        return url or None
+            return None, ""
+        fields = raw_records[0]["fields"]
+
+        # Source image
+        img_url = fields.get("Source Image URL", "").strip() or None
+        if img_url:
+            log.info(f"  Found source image: {img_url[:80]}...")
+
+        # summary_en from AI Summary JSON
+        summary_en = ""
+        ai_summary = fields.get("AI Summary", "")
+        if ai_summary:
+            try:
+                import json
+                data = json.loads(ai_summary)
+                summary_en = data.get("summary_en", "")
+            except Exception:
+                pass
+
+        return img_url, summary_en
 
     def _upload_to_cloudinary(self, photo_url: str | None, public_id: str,
                               title: str = "", caption: str = "") -> str:
