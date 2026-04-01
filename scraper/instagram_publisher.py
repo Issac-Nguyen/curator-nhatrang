@@ -5,10 +5,9 @@ qua Instagram Graph API (Content Publishing).
 Flow:
 1. Auto-refresh token nếu còn < 7 ngày
 2. Query Airtable: Status=Approved, có Image URL, chưa có Instagram Post ID
-3. Pre-render Cloudinary URL → clean URL (Instagram không hỗ trợ complex transform URL)
-4. POST /{ig_user_id}/media  → tạo container (image_url + caption)
-5. POST /{ig_user_id}/media_publish → publish container
-6. Update Airtable: Instagram Post ID + Status=Scheduled
+3. POST /{ig_user_id}/media  → tạo container (image_url + caption)
+4. POST /{ig_user_id}/media_publish → publish container
+5. Update Airtable: Instagram Post ID + Status=Scheduled
 """
 import logging
 import os
@@ -16,8 +15,6 @@ import re
 import time
 from pathlib import Path
 
-import cloudinary
-import cloudinary.uploader
 import requests
 from dotenv import load_dotenv
 
@@ -117,19 +114,12 @@ class InstagramPublisher:
         if not self.access_token or not self.user_id:
             missing = []
             if not self.user_id:
-                missing.append("self.user_id")
+                missing.append("INSTAGRAM_USER_ID")
             if not self.access_token:
                 missing.append("INSTAGRAM_ACCESS_TOKEN")
             raise RuntimeError(f"Missing env vars: {', '.join(missing)}")
 
         self.client = AirtableClient()
-
-        cloudinary.config(
-            cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
-            api_key=os.getenv("CLOUDINARY_API_KEY"),
-            api_secret=os.getenv("CLOUDINARY_API_SECRET"),
-            secure=True,
-        )
 
     def push_pending_items(self, limit: int = 20) -> dict:
         """
@@ -163,8 +153,7 @@ class InstagramPublisher:
                 continue
 
             try:
-                clean_url = self._get_clean_image_url(image_url)
-                media_id = self._publish_photo(caption, clean_url)
+                media_id = self._publish_photo(caption, image_url)
                 # Update Buffer ID field as dedup guard (reuse existing field)
                 self.client.update_record("contentQueue", record_id, {
                     "Buffer ID": f"ig:{media_id}",
@@ -191,37 +180,6 @@ class InstagramPublisher:
             return ""
         parts = [p for p in [vn, en] if p]
         return "\n\n".join(parts)
-
-    def _get_clean_image_url(self, image_url: str) -> str:
-        """
-        Cloudinary transformation URLs (với text overlay tiếng Việt)
-        không hoạt động với Instagram API. Trích xuất public_id từ URL
-        và build lại URL đơn giản chỉ với c_fill,w_1080,h_1080.
-        """
-        # URL format: .../image/upload/{transforms}/{public_id}
-        # Extract public_id: phần sau "fl_layer_apply/" cuối cùng, hoặc sau transform cuối
-        parts = image_url.split("/image/upload/")
-        if len(parts) != 2:
-            return image_url  # không phải Cloudinary URL
-
-        cloud_base = parts[0]
-        transform_and_id = parts[1]
-
-        # public_id là phần cuối sau tất cả transformations
-        # Cloudinary transformations kết thúc tại segment cuối chứa public_id
-        # Tìm public_id bằng cách lấy phần sau "fl_layer_apply/" cuối cùng
-        if "/fl_layer_apply/" in transform_and_id:
-            last_apply_idx = transform_and_id.rfind("/fl_layer_apply/")
-            public_id = transform_and_id[last_apply_idx + len("/fl_layer_apply/"):]
-        else:
-            # Fallback: tách transforms (chứa dấu ,) khỏi public_id
-            segments = transform_and_id.split("/")
-            non_transform = [s for s in segments if "," not in s and not s.startswith("e_") and not s.startswith("l_")]
-            public_id = "/".join(non_transform) if non_transform else transform_and_id
-
-        clean_url = f"{cloud_base}/image/upload/c_fill,w_1080,h_1080/{public_id}.jpg"
-        log.info(f"  Clean image URL: {clean_url}")
-        return clean_url
 
     def _publish_photo(self, caption: str, image_url: str) -> str:
         """
