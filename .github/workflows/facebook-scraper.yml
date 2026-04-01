@@ -1,0 +1,32 @@
+name: Facebook Scraper
+on:
+  schedule:
+    - cron: '0 2,10,18 * * *'
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /run-facebook
+        id: api
+        run: |
+          RESULT=$(curl -sf --max-time 300 -X POST \
+            "${{ secrets.CURATOR_API_URL }}/run-facebook" \
+            -H "X-API-Key: ${{ secrets.API_SECRET_KEY }}")
+          echo "$RESULT"
+          echo "result=$RESULT" >> "$GITHUB_OUTPUT"
+
+      - name: Telegram Notification
+        if: always()
+        run: |
+          if [ "${{ steps.api.outcome }}" = "success" ]; then
+            ADDED=$(echo '${{ steps.api.outputs.result }}' | jq -r '.created // 0')
+            MSG="✅ Facebook Scraper: ${ADDED} new items"
+          else
+            MSG="❌ Facebook Scraper: API call failed"
+          fi
+          curl -sf -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "text=${MSG}"

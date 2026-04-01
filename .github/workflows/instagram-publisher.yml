@@ -1,0 +1,44 @@
+name: Instagram Publisher
+on:
+  schedule:
+    - cron: '0 4,8,12,16,20,0 * * *'
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /run-visual
+        id: visual
+        run: |
+          RESULT=$(curl -sf --max-time 300 -X POST \
+            "${{ secrets.CURATOR_API_URL }}/run-visual" \
+            -H "X-API-Key: ${{ secrets.API_SECRET_KEY }}")
+          echo "$RESULT"
+          echo "result=$RESULT" >> "$GITHUB_OUTPUT"
+
+      - name: Call /run-instagram
+        id: instagram
+        run: |
+          RESULT=$(curl -sf --max-time 300 -X POST \
+            "${{ secrets.CURATOR_API_URL }}/run-instagram" \
+            -H "X-API-Key: ${{ secrets.API_SECRET_KEY }}")
+          echo "$RESULT"
+          echo "result=$RESULT" >> "$GITHUB_OUTPUT"
+
+      - name: Telegram Notification
+        if: always()
+        run: |
+          if [ "${{ steps.instagram.outcome }}" = "success" ]; then
+            PUSHED=$(echo '${{ steps.instagram.outputs.result }}' | jq -r '.pushed // 0')
+            SKIPPED=$(echo '${{ steps.instagram.outputs.result }}' | jq -r '.skipped // 0')
+            ERRORS=$(echo '${{ steps.instagram.outputs.result }}' | jq -r '.errors // 0')
+            VISUAL=$(echo '${{ steps.visual.outputs.result }}' | jq -r '.processed // 0' 2>/dev/null || echo "?")
+            MSG="✅ Instagram Publisher: pushed ${PUSHED} | skipped ${SKIPPED} | errors ${ERRORS} | visual ${VISUAL}"
+          else
+            MSG="❌ Instagram Publisher: API call failed"
+          fi
+          curl -sf -X POST \
+            "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "text=${MSG}"
