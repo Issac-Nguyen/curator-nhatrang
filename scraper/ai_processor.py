@@ -22,7 +22,7 @@ from airtable_client import AirtableClient
 load_dotenv(Path(__file__).parent.parent / ".env")
 log = logging.getLogger(__name__)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_KEYS = [k for k in [os.getenv("GROQ_API_KEY"), os.getenv("GROQ_API_KEY_2")] if k]
 MODEL = "llama-3.3-70b-versatile"
 BATCH_SIZE = 5       # items per API call
 RATE_LIMIT_SLEEP = 2  # seconds between batches (30 RPM = 2s min interval)
@@ -73,10 +73,21 @@ Chỉ trả về JSON array, không có text khác."""
 
 class AIProcessor:
     def __init__(self):
-        if not GROQ_API_KEY:
+        if not GROQ_API_KEYS:
             raise RuntimeError("GROQ_API_KEY not set in .env")
-        self.groq = Groq(api_key=GROQ_API_KEY)
+        self._key_index = 0
+        self.groq = Groq(api_key=GROQ_API_KEYS[0])
         self.client = AirtableClient()
+
+    def _rotate_key(self) -> bool:
+        """Switch to next API key. Returns True if rotated, False if no more keys."""
+        self._key_index += 1
+        if self._key_index >= len(GROQ_API_KEYS):
+            self._key_index = 0
+            return False
+        self.groq = Groq(api_key=GROQ_API_KEYS[self._key_index])
+        log.info(f"Rotated to Groq API key {self._key_index + 1}/{len(GROQ_API_KEYS)}")
+        return True
 
     def _analyze_batch(self, items: list[dict]) -> list[dict]:
         """Send a batch of items to Groq, return list of analysis results."""
@@ -193,9 +204,39 @@ class AIProcessor:
                 stats["errors"] += len(batch)
                 time.sleep(RATE_LIMIT_SLEEP)
             except Exception as e:
-                log.error(f"Batch {i//BATCH_SIZE + 1} error: {e}")
-                stats["errors"] += len(batch)
-                time.sleep(5)
+                if "429" in str(e) and self._rotate_key():
+                    log.warning(f"Rate limited, retrying batch with next key...")
+                    try:
+                        results = self._analyze_batch(batch)
+                        result_map = {r["id"]: r for r in results}
+                        for record in batch:
+                            record_id = record["id"]
+                            result = result_map.get(record_id, {})
+                            if not result:
+                                stats["errors"] += 1
+                                continue
+                            if not result.get("relevant", True):
+                                new_status = "Skip"
+                                stats["skip"] += 1
+                            else:
+                                potential = result.get("content_potential", "medium")
+                                new_status = "Use" if potential == "high" else "Reviewed"
+                                if potential == "high":
+                                    stats["use"] += 1
+                                else:
+                                    stats["reviewed"] += 1
+                            self.client.update_record("rawItems", record_id, {
+                                "AI Summary": json.dumps(result, ensure_ascii=False),
+                                "Status": new_status,
+                            })
+                            stats["processed"] += 1
+                    except Exception as e2:
+                        log.error(f"Batch {i//BATCH_SIZE + 1} retry failed: {e2}")
+                        stats["errors"] += len(batch)
+                else:
+                    log.error(f"Batch {i//BATCH_SIZE + 1} error: {e}")
+                    stats["errors"] += len(batch)
+                    time.sleep(5)
 
         log.info(f"Processing complete: {stats}")
         return stats
