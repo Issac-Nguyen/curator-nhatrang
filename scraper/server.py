@@ -42,22 +42,6 @@ def health():
     return jsonify({"status": "ok"})
 
 
-@app.post("/run-rss")
-def run_rss():
-    err = _check_auth()
-    if err:
-        return err
-    try:
-        client = AirtableClient()
-        dedup = Deduplicator(client)
-        created = pipeline.run_rss_pipeline(client, dedup)
-        log.info(f"/run-rss: {created} new items")
-        return jsonify({"created": created})
-    except Exception as e:
-        log.error(f"/run-rss error: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
 @app.post("/run-facebook")
 def run_facebook():
     err = _check_auth()

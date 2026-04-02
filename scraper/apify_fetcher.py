@@ -3,6 +3,8 @@ import os
 import time
 from datetime import datetime, timezone
 
+import cloudinary
+import cloudinary.uploader
 import requests
 from dotenv import load_dotenv
 from pathlib import Path
@@ -11,6 +13,13 @@ from og_image import extract_og_image
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 log = logging.getLogger(__name__)
+
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True,
+)
 
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 ACTOR_ID = "apify~facebook-posts-scraper"
@@ -104,6 +113,27 @@ class ApifyFetcher:
     def _get_url(self, post: dict) -> str | None:
         return post.get("url") or post.get("postUrl") or post.get("link")
 
+    @staticmethod
+    def _persist_image(url: str) -> str | None:
+        """Download image first (bypass CDN blocks), then upload bytes to Cloudinary."""
+        try:
+            resp = requests.get(
+                url,
+                timeout=15,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Referer": "https://www.facebook.com/",
+                },
+            )
+            resp.raise_for_status()
+            result = cloudinary.uploader.upload(
+                resp.content, folder="nhatrang/sources", overwrite=False, resource_type="image",
+            )
+            return result["secure_url"]
+        except Exception as e:
+            log.warning(f"Failed to persist image to Cloudinary: {e}")
+            return None
+
     def _normalize(self, post: dict, source_id: str, source_name: str) -> dict:
         text = post.get("text") or post.get("message") or post.get("body") or ""
         raw_date = post.get("time") or post.get("date") or post.get("created_time")
@@ -123,11 +153,31 @@ class ApifyFetcher:
             or post.get("picture")
         )
 
+        # Extract from media array (Apify facebook-posts-scraper format)
+        if not source_image_url:
+            media = post.get("media")
+            if media and isinstance(media, list) and media:
+                first = media[0]
+                source_image_url = (
+                    first.get("thumbnail")
+                    or (first.get("thumbnailImage") or {}).get("uri")
+                )
+
+        # Extract from preferred_thumbnail (another Apify field)
+        if not source_image_url:
+            pref = post.get("preferred_thumbnail")
+            if pref:
+                source_image_url = (pref.get("image") or {}).get("uri")
+
         # Fallback: extract og:image from post URL
         if not source_image_url:
             post_url = self._get_url(post)
             if post_url:
                 source_image_url = extract_og_image(post_url)
+
+        # Upload to Cloudinary immediately (fbcdn URLs expire in hours)
+        if source_image_url:
+            source_image_url = self._persist_image(source_image_url)
 
         return {
             "title": text[:100].strip() if text else "",
