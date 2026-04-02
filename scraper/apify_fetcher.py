@@ -11,7 +11,9 @@ from pathlib import Path
 
 from og_image import extract_og_image
 
-load_dotenv(Path(__file__).parent.parent / ".env")
+_env_path = Path(__file__).parent.parent / ".env"
+if _env_path.exists():
+    load_dotenv(_env_path, override=False)
 log = logging.getLogger(__name__)
 
 cloudinary.config(
@@ -29,7 +31,12 @@ def _clean_token(t: str | None) -> str | None:
     return cleaned if cleaned else None
 
 
-APIFY_TOKENS = [c for c in [_clean_token(os.getenv("APIFY_TOKEN")), _clean_token(os.getenv("APIFY_TOKEN_2"))] if c]
+_raw1 = os.getenv("APIFY_TOKEN", "")
+_raw2 = os.getenv("APIFY_TOKEN_2", "")
+log.info(f"APIFY_TOKEN raw repr: {repr(_raw1[:20])}... len={len(_raw1)}")
+log.info(f"APIFY_TOKEN_2 raw repr: {repr(_raw2[:20])}... len={len(_raw2)}")
+APIFY_TOKENS = [c for c in [_clean_token(_raw1), _clean_token(_raw2)] if c]
+log.info(f"APIFY_TOKENS count: {len(APIFY_TOKENS)}")
 ACTOR_ID = "apify~facebook-posts-scraper"
 BASE_URL = "https://api.apify.com/v2"
 POLL_INTERVAL = 5   # seconds between status checks
