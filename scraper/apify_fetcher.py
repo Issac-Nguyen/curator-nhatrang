@@ -21,7 +21,15 @@ cloudinary.config(
     secure=True,
 )
 
-APIFY_TOKENS = [t for t in [os.getenv("APIFY_TOKEN"), os.getenv("APIFY_TOKEN_2")] if t]
+def _clean_token(t: str | None) -> str | None:
+    """Strip non-ASCII chars from token (safety against bad .env encoding)."""
+    if not t:
+        return None
+    cleaned = t.encode("ascii", errors="ignore").decode("ascii").strip()
+    return cleaned if cleaned else None
+
+
+APIFY_TOKENS = [c for c in [_clean_token(os.getenv("APIFY_TOKEN")), _clean_token(os.getenv("APIFY_TOKEN_2"))] if c]
 ACTOR_ID = "apify~facebook-posts-scraper"
 BASE_URL = "https://api.apify.com/v2"
 POLL_INTERVAL = 5   # seconds between status checks
