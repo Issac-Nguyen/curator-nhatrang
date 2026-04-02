@@ -21,8 +21,7 @@ jobs:
         if: always()
         run: |
           if [ "${{ steps.api.outcome }}" = "success" ]; then
-            ADDED=$(echo '${{ steps.api.outputs.result }}' | jq -r '.created // 0')
-            MSG="✅ Facebook Scraper: ${ADDED} new items"
+            MSG="✅ Facebook Scraper: triggered (running in background)"
           else
             MSG="❌ Facebook Scraper: API call failed"
           fi
