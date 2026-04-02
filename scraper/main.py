@@ -14,7 +14,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-SOURCES_PER_RUN = 10  # round-robin: scrape N oldest-checked sources per run
+SOURCES_PER_RUN = 3  # round-robin: scrape N oldest-checked sources per run
 
 
 def run_facebook_pipeline(client: AirtableClient, dedup: Deduplicator) -> int:
