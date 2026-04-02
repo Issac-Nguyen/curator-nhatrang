@@ -8,6 +8,15 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
+      - name: Promote Raw Items to Content Queue
+        id: content
+        run: |
+          RESULT=$(curl -sf --max-time 60 -X POST \
+            "${{ secrets.CURATOR_API_URL }}/run-content-creator" \
+            -H "X-API-Key: ${{ secrets.API_SECRET_KEY }}")
+          echo "$RESULT"
+          echo "result=$RESULT" >> "$GITHUB_OUTPUT"
+
       - name: Call /run-visual
         id: visual
         run: |
@@ -30,13 +39,12 @@ jobs:
         if: always()
         run: |
           if [ "${{ steps.instagram.outcome }}" = "success" ]; then
+            PROMOTED=$(echo '${{ steps.content.outputs.result }}' | jq -r '.promoted // 0')
             PUSHED=$(echo '${{ steps.instagram.outputs.result }}' | jq -r '.pushed // 0')
-            SKIPPED=$(echo '${{ steps.instagram.outputs.result }}' | jq -r '.skipped // 0')
-            ERRORS=$(echo '${{ steps.instagram.outputs.result }}' | jq -r '.errors // 0')
-            VISUAL=$(echo '${{ steps.visual.outputs.result }}' | jq -r '.processed // 0' 2>/dev/null || echo "?")
-            MSG="✅ Instagram Publisher: pushed ${PUSHED} | skipped ${SKIPPED} | errors ${ERRORS} | visual ${VISUAL}"
+            VISUAL=$(echo '${{ steps.visual.outputs.result }}' | jq -r '.processed // 0')
+            MSG="✅ Instagram Pipeline: promoted ${PROMOTED} | visual ${VISUAL} | pushed ${PUSHED}"
           else
-            MSG="❌ Instagram Publisher: API call failed"
+            MSG="❌ Instagram Pipeline: failed"
           fi
           curl -sf -X POST \
             "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \

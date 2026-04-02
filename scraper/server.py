@@ -82,6 +82,22 @@ def run_facebook():
     return jsonify({"status": "started", "message": "Facebook scraper running in background"})
 
 
+@app.post("/run-content-creator")
+def run_content_creator():
+    err = _check_auth()
+    if err:
+        return err
+    try:
+        from content_creator import ContentCreator
+        creator = ContentCreator()
+        stats = creator.promote_items(limit=10)
+        log.info(f"/run-content-creator: {stats}")
+        return jsonify(stats)
+    except Exception as e:
+        log.error(f"/run-content-creator error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.post("/run-ai-processor")
 def run_ai_processor():
     err = _check_auth()
