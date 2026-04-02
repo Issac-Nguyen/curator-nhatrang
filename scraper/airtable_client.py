@@ -41,11 +41,16 @@ def _request(method: str, url: str, **kwargs) -> dict:
 
 
 class AirtableClient:
-    def get_active_sources(self, type_filter: str = None) -> list[dict]:
-        """Return active sources, optionally filtered by Type."""
-        params = {"filterByFormula": "{Active}=1"}
+    def get_active_sources(self, type_filter: str = None, limit: int = None) -> list[dict]:
+        """Return active sources sorted by Last checked (oldest first), optionally limited."""
+        formula = "{Active}=1"
         if type_filter:
-            params["filterByFormula"] = f'AND({{Active}}=1, {{Type}}="{type_filter}")'
+            formula = f'AND({{Active}}=1, {{Type}}="{type_filter}")'
+        params = {
+            "filterByFormula": formula,
+            "sort[0][field]": "Last checked",
+            "sort[0][direction]": "asc",
+        }
 
         records = []
         offset = None
@@ -58,7 +63,9 @@ class AirtableClient:
             offset = data.get("offset")
             if not offset:
                 break
-        log.info(f"Loaded {len(records)} active sources" + (f" (type={type_filter})" if type_filter else ""))
+        if limit:
+            records = records[:limit]
+        log.info(f"Loaded {len(records)} active sources" + (f" (type={type_filter})" if type_filter else "") + (f" (limit={limit})" if limit else ""))
         return records
 
     def get_existing_urls(self) -> set[str]:

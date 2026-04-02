@@ -14,8 +14,11 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
+SOURCES_PER_RUN = 10  # round-robin: scrape N oldest-checked sources per run
+
+
 def run_facebook_pipeline(client: AirtableClient, dedup: Deduplicator) -> int:
-    sources = client.get_active_sources(type_filter="Facebook")
+    sources = client.get_active_sources(type_filter="Facebook", limit=SOURCES_PER_RUN)
     if not sources:
         log.info("No active Facebook sources found")
         return 0
