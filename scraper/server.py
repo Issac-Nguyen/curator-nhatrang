@@ -201,8 +201,10 @@ def run_cleanup():
     if err:
         return err
     try:
+        import cloudinary.api
+        import cloudinary.uploader
         client = AirtableClient()
-        stats = {"published_deleted": 0, "raw_skip_deleted": 0, "raw_old_deleted": 0}
+        stats = {"published_deleted": 0, "raw_skip_deleted": 0, "raw_old_deleted": 0, "cloudinary_deleted": 0}
 
         # 1. Delete Published records > 30 days
         old_published = client.get_records(
@@ -233,6 +235,20 @@ def run_cleanup():
         if old_new_items:
             ids = [r["id"] for r in old_new_items]
             stats["raw_old_deleted"] = client.delete_records_batch("rawItems", ids)
+
+        # 4. Delete orphan Cloudinary source images (nhatrang/sources/)
+        try:
+            result = cloudinary.api.resources(
+                type="upload", prefix="nhatrang/sources/", max_results=100,
+            )
+            resources = result.get("resources", [])
+            if resources:
+                public_ids = [r["public_id"] for r in resources]
+                cloudinary.api.delete_resources(public_ids)
+                stats["cloudinary_deleted"] = len(public_ids)
+                log.info(f"Deleted {len(public_ids)} Cloudinary source images")
+        except Exception as e:
+            log.warning(f"Cloudinary cleanup failed: {e}")
 
         log.info(f"/run-cleanup: {stats}")
         return jsonify(stats)
