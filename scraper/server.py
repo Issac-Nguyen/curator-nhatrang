@@ -43,6 +43,22 @@ def health():
     return jsonify({"status": "ok"})
 
 
+def _notify_telegram(msg: str):
+    """Best-effort Telegram notification."""
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    if not bot_token or not chat_id:
+        return
+    try:
+        import requests
+        requests.post(
+            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+            data={"chat_id": chat_id, "text": msg}, timeout=10,
+        )
+    except Exception:
+        pass
+
+
 def _run_facebook_bg():
     """Background worker for Facebook scraping."""
     try:
@@ -50,8 +66,10 @@ def _run_facebook_bg():
         dedup = Deduplicator(client)
         created = pipeline.run_facebook_pipeline(client, dedup)
         log.info(f"[BG] Facebook scraper done: {created} new items")
+        _notify_telegram(f"✅ Facebook Scraper (BG): {created} new items")
     except Exception as e:
         log.error(f"[BG] Facebook scraper error: {e}")
+        _notify_telegram(f"❌ Facebook Scraper (BG): {e}")
 
 
 @app.post("/run-facebook")
