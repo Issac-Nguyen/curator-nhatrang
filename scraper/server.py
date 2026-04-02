@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+import threading
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -42,20 +43,25 @@ def health():
     return jsonify({"status": "ok"})
 
 
+def _run_facebook_bg():
+    """Background worker for Facebook scraping."""
+    try:
+        client = AirtableClient()
+        dedup = Deduplicator(client)
+        created = pipeline.run_facebook_pipeline(client, dedup)
+        log.info(f"[BG] Facebook scraper done: {created} new items")
+    except Exception as e:
+        log.error(f"[BG] Facebook scraper error: {e}")
+
+
 @app.post("/run-facebook")
 def run_facebook():
     err = _check_auth()
     if err:
         return err
-    try:
-        client = AirtableClient()
-        dedup = Deduplicator(client)
-        created = pipeline.run_facebook_pipeline(client, dedup)
-        log.info(f"/run-facebook: {created} new items")
-        return jsonify({"created": created})
-    except Exception as e:
-        log.error(f"/run-facebook error: {e}")
-        return jsonify({"error": str(e)}), 500
+    thread = threading.Thread(target=_run_facebook_bg, daemon=True)
+    thread.start()
+    return jsonify({"status": "started", "message": "Facebook scraper running in background"})
 
 
 @app.post("/run-ai-processor")
