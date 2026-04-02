@@ -21,7 +21,7 @@ cloudinary.config(
     secure=True,
 )
 
-APIFY_TOKEN = os.getenv("APIFY_TOKEN")
+APIFY_TOKENS = [t for t in [os.getenv("APIFY_TOKEN"), os.getenv("APIFY_TOKEN_2")] if t]
 ACTOR_ID = "apify~facebook-posts-scraper"
 BASE_URL = "https://api.apify.com/v2"
 POLL_INTERVAL = 5   # seconds between status checks
@@ -35,15 +35,28 @@ class ApifyRunError(Exception):
 
 class ApifyFetcher:
     def __init__(self):
-        if not APIFY_TOKEN:
+        if not APIFY_TOKENS:
             raise RuntimeError("APIFY_TOKEN not set in .env")
-        self.headers = {"Authorization": f"Bearer {APIFY_TOKEN}"}
+        self._token_index = 0
+        self.headers = {"Authorization": f"Bearer {APIFY_TOKENS[0]}"}
+
+    def _rotate_token(self) -> bool:
+        """Switch to next Apify token. Returns True if rotated, False if no more."""
+        self._token_index += 1
+        if self._token_index >= len(APIFY_TOKENS):
+            self._token_index = 0
+            return False
+        self.headers = {"Authorization": f"Bearer {APIFY_TOKENS[self._token_index]}"}
+        log.info(f"Rotated to Apify token {self._token_index + 1}/{len(APIFY_TOKENS)}")
+        return True
 
     def _request(self, method: str, url: str, **kwargs) -> dict:
         resp = requests.request(method, url, headers=self.headers, **kwargs)
         if resp.status_code == 429:
             log.warning(f"Apify rate limit, sleeping {RATE_LIMIT_SLEEP}s")
             time.sleep(RATE_LIMIT_SLEEP)
+            resp = requests.request(method, url, headers=self.headers, **kwargs)
+        if resp.status_code == 403 and self._rotate_token():
             resp = requests.request(method, url, headers=self.headers, **kwargs)
         resp.raise_for_status()
         return resp.json()
