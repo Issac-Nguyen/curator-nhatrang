@@ -62,10 +62,6 @@ def _notify_telegram(msg: str):
 def _run_facebook_bg():
     """Background worker for Facebook scraping."""
     try:
-        # Debug: log token info
-        t1 = os.getenv("APIFY_TOKEN", "")
-        t2 = os.getenv("APIFY_TOKEN_2", "")
-        _notify_telegram(f"🔍 Debug: T1={t1[:15]}...({len(t1)}) T2={t2[:15]}...({len(t2)}) ascii={t2.isascii()}")
         client = AirtableClient()
         dedup = Deduplicator(client)
         created = pipeline.run_facebook_pipeline(client, dedup)
