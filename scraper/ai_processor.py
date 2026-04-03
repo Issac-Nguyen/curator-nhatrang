@@ -59,7 +59,7 @@ CHỈ relevant khi bài viết CỤ THỂ về một địa điểm, quán ăn, 
 
 QUAN TRỌNG — Structured fields (event_date, event_time, price, address, opening_hours):
 - CHỈ điền khi thông tin CÓ TRONG bài viết gốc. KHÔNG được bịa hoặc suy đoán.
-- Nếu không có thông tin → để null.
+- Nếu không có thông tin trong bài viết NHƯNG có source_address → dùng source_address cho field address.
 - price: giữ nguyên format gốc từ bài (500K, 45.000đ, từ 200K, free, miễn phí).
 - event_date: chuyển sang dd/mm hoặc dd/mm/yyyy.
 - opening_hours: format HH:MM-HH:MM hoặc giữ nguyên từ bài.
@@ -89,13 +89,32 @@ class AIProcessor:
         log.info(f"Rotated to Groq API key {self._key_index + 1}/{len(GROQ_API_KEYS)}")
         return True
 
-    def _analyze_batch(self, items: list[dict]) -> list[dict]:
+    def _get_source_address(self, item: dict) -> str:
+        """Lookup Address from linked Source record."""
+        source_ids = item["fields"].get("Source", [])
+        if not source_ids:
+            return ""
+        try:
+            records = self.client.get_records(
+                "sources",
+                filter_formula=f'RECORD_ID()="{source_ids[0]}"',
+                max_records=1,
+            )
+            if records:
+                return records[0]["fields"].get("Address", "")
+        except Exception:
+            pass
+        return ""
+
+    def _analyze_batch(self, items: list[dict], source_addresses: dict = None) -> list[dict]:
         """Send a batch of items to Groq, return list of analysis results."""
+        source_addresses = source_addresses or {}
         payload = [
             {
                 "id": item["id"],
                 "title": item["fields"].get("Title", "")[:200],
                 "content": item["fields"].get("Content", "")[:1000],
+                "source_address": source_addresses.get(item["id"], ""),
             }
             for item in items
         ]
@@ -141,6 +160,13 @@ class AIProcessor:
 
         stats = {"processed": 0, "use": 0, "reviewed": 0, "skip": 0, "errors": 0}
 
+        # Lookup source addresses for all items
+        source_addresses = {}
+        for r in records:
+            addr = self._get_source_address(r)
+            if addr:
+                source_addresses[r["id"]] = addr
+
         # Pre-filter: skip items with empty content (no need for AI)
         empty = [r for r in records if not r["fields"].get("Content", "").strip()]
         if empty:
@@ -158,7 +184,7 @@ class AIProcessor:
             log.info(f"Batch {i//BATCH_SIZE + 1}: analyzing {len(batch)} items...")
 
             try:
-                results = self._analyze_batch(batch)
+                results = self._analyze_batch(batch, source_addresses)
 
                 # Map results by id
                 result_map = {r["id"]: r for r in results}
@@ -207,7 +233,7 @@ class AIProcessor:
                 if "429" in str(e) and self._rotate_key():
                     log.warning(f"Rate limited, retrying batch with next key...")
                     try:
-                        results = self._analyze_batch(batch)
+                        results = self._analyze_batch(batch, source_addresses)
                         result_map = {r["id"]: r for r in results}
                         for record in batch:
                             record_id = record["id"]
