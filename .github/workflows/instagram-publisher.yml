@@ -8,9 +8,6 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: Wake up Render
-        run: curl -sf --max-time 120 "${{ secrets.CURATOR_API_URL }}/health" || true
-
       - name: Promote Raw Items to Content Queue
         id: content
         continue-on-error: true
