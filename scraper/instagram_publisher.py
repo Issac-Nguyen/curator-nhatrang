@@ -164,6 +164,7 @@ class InstagramPublisher:
             try:
                 media_id = self._publish_photo(caption, image_url)
                 log.info(f"  [Published] {title} → IG Media ID: {media_id}")
+                self._post_source_link_comment(record, media_id)
                 self._cleanup_after_publish(record, record_id, media_id)
                 stats["pushed"] += 1
                 time.sleep(2)
@@ -182,6 +183,36 @@ class InstagramPublisher:
             return ""
         parts = [p for p in [vn, en] if p]
         return "\n\n".join(parts)
+
+    def _post_source_link_comment(self, record: dict, media_id: str) -> None:
+        """Post a comment with the source URL on the published media."""
+        raw_item_ids = record["fields"].get("Raw Item", [])
+        if not raw_item_ids:
+            return
+        try:
+            raw_records = self.client.get_records(
+                "rawItems",
+                filter_formula=f'RECORD_ID()="{raw_item_ids[0]}"',
+                max_records=1,
+            )
+            if not raw_records:
+                return
+            source_url = raw_records[0]["fields"].get("URL", "").strip()
+            if not source_url:
+                return
+
+            comment = f"📌 Nguồn / Source: {source_url}"
+            resp = requests.post(
+                f"{GRAPH_API_BASE}/{media_id}/comments",
+                data={"message": comment, "access_token": self.access_token},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                log.info(f"  [Comment] Posted source link")
+            else:
+                log.warning(f"  [Comment] Failed: {resp.json()}")
+        except Exception as e:
+            log.warning(f"  [Comment] Error: {e}")
 
     def _cleanup_after_publish(self, record: dict, record_id: str, media_id: str) -> None:
         """
