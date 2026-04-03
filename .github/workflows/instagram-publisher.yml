@@ -8,10 +8,14 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
+      - name: Wake up Render
+        run: curl -sf --max-time 120 "${{ secrets.CURATOR_API_URL }}/health" || true
+
       - name: Promote Raw Items to Content Queue
         id: content
+        continue-on-error: true
         run: |
-          RESULT=$(curl -sf --max-time 60 -X POST \
+          RESULT=$(curl -sf --max-time 120 -X POST \
             "${{ secrets.CURATOR_API_URL }}/run-content-creator" \
             -H "X-API-Key: ${{ secrets.API_SECRET_KEY }}")
           echo "$RESULT"
@@ -19,6 +23,7 @@ jobs:
 
       - name: Call /run-visual
         id: visual
+        continue-on-error: true
         run: |
           RESULT=$(curl -sf --max-time 300 -X POST \
             "${{ secrets.CURATOR_API_URL }}/run-visual" \
