@@ -27,6 +27,7 @@ load_dotenv(ENV_PATH)
 log = logging.getLogger(__name__)
 
 GRAPH_API_BASE = "https://graph.instagram.com/v22.0"
+NHA_TRANG_LOCATION_ID = "213092348"
 
 # Số ngày còn lại trước khi tự động refresh token
 TOKEN_REFRESH_THRESHOLD_DAYS = 7
@@ -296,6 +297,7 @@ class InstagramPublisher:
             data={
                 "image_url": image_url,
                 "caption": caption,
+                "location_id": NHA_TRANG_LOCATION_ID,
                 "access_token": self.access_token,
             },
         )
