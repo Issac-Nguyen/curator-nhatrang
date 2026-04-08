@@ -64,9 +64,24 @@ def _run_facebook_bg():
     try:
         client = AirtableClient()
         dedup = Deduplicator(client)
-        created = pipeline.run_facebook_pipeline(client, dedup)
+        result = pipeline.run_facebook_pipeline(client, dedup)
+        created = result["new_items"]
+        stats = result["stats"]
+
+        if stats:
+            tiers = stats["tier_counts"]
+            msg = (
+                f"✅ Facebook Scraper: {created} new items\n"
+                f"📊 HOT={tiers['HOT']} WARM={tiers['WARM']} "
+                f"COLD={tiers['COLD']} NEW={tiers['NEW']}\n"
+                f"🎯 Eligible: {stats['eligible_count']} | "
+                f"Scraped: {stats['selected_count']}"
+            )
+        else:
+            msg = f"✅ Facebook Scraper: {created} new items"
+
         log.info(f"[BG] Facebook scraper done: {created} new items")
-        _notify_telegram(f"✅ Facebook Scraper (BG): {created} new items")
+        _notify_telegram(msg)
     except Exception as e:
         log.error(f"[BG] Facebook scraper error: {e}")
         _notify_telegram(f"❌ Facebook Scraper (BG): {e}")
