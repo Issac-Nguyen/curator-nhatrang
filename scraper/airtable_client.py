@@ -193,3 +193,29 @@ class AirtableClient:
             deleted += len(batch)
             log.info(f"Batch deleted {len(batch)} records from {table_key}")
         return deleted
+
+    def get_latest_post_dates(self) -> dict[str, str]:
+        """Return {source_record_id: latest_published_date_iso} for all Raw Items.
+
+        Fetches Source and Published date fields, aggregates MAX date per source.
+        Used by tier scheduler to determine source activity level.
+        """
+        latest: dict[str, str] = {}
+        offset = None
+        params = {"fields[]": ["Source", "Published date"], "pageSize": 100}
+        while True:
+            if offset:
+                params["offset"] = offset
+            data = _request("GET", f"{BASE_URL}/Raw%20Items", params=params)
+            for r in data.get("records", []):
+                fields = r.get("fields", {})
+                source_ids = fields.get("Source", [])
+                pub_date = fields.get("Published date", "")
+                for sid in source_ids:
+                    if pub_date and pub_date > latest.get(sid, ""):
+                        latest[sid] = pub_date
+            offset = data.get("offset")
+            if not offset:
+                break
+        log.info(f"Loaded latest post dates for {len(latest)} sources")
+        return latest
