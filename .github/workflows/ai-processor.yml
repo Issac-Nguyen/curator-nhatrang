@@ -8,6 +8,18 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
+      - name: Wake up Render service
+        run: |
+          for i in 1 2 3 4 5 6; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${{ secrets.CURATOR_API_URL }}/health")
+            if [ "$STATUS" = "200" ]; then
+              echo "Service is up (attempt $i)"
+              break
+            fi
+            echo "Service not ready (HTTP $STATUS), waiting 10s... (attempt $i)"
+            sleep 10
+          done
+
       - name: Call /run-ai-processor
         id: api
         run: |

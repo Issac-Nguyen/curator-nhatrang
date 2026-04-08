@@ -1,6 +1,12 @@
 Legends: [ ] new, [.] working, [x] done, [!] blocked
 Dates: (YYYY-MM-DD →) = started, (YYYY-MM-DD → YYYY-MM-DD) = completed, no dates = not started
 
+## Infrastructure — Render Cold Start Fix (2026-04-08 →)
+
+> Render free tier spins down after ~15 min idle. GitHub Actions cron jobs hit 521 error instantly before service wakes up.
+
+- [x] INFRA-1: Add "Wake up Render service" warm-up step to all 4 GitHub Actions workflows — retry /health up to 6 times with 10s intervals before calling actual endpoint (2026-04-08 → 2026-04-08)
+
 ## Instagram Visual Improvement (2026-04-08 →)
 
 > Based on visual audit of Instagram grid + post view.

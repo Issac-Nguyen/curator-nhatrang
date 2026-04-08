@@ -8,6 +8,18 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
+      - name: Wake up Render service
+        run: |
+          for i in 1 2 3 4 5 6; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${{ secrets.CURATOR_API_URL }}/health")
+            if [ "$STATUS" = "200" ]; then
+              echo "Service is up (attempt $i)"
+              break
+            fi
+            echo "Service not ready (HTTP $STATUS), waiting 10s... (attempt $i)"
+            sleep 10
+          done
+
       - name: Promote Raw Items to Content Queue
         id: content
         continue-on-error: true
@@ -20,13 +32,15 @@ jobs:
 
       - name: Call /run-visual
         id: visual
-        continue-on-error: true
         run: |
           RESULT=$(curl -sf --max-time 300 -X POST \
             "${{ secrets.CURATOR_API_URL }}/run-visual" \
             -H "X-API-Key: ${{ secrets.API_SECRET_KEY }}")
           echo "$RESULT"
           echo "result=$RESULT" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Airtable sync
+        run: sleep 10
 
       - name: Call /run-instagram
         id: instagram
@@ -35,7 +49,19 @@ jobs:
             "${{ secrets.CURATOR_API_URL }}/run-instagram" \
             -H "X-API-Key: ${{ secrets.API_SECRET_KEY }}")
           echo "$RESULT"
+          PUSHED=$(echo "$RESULT" | jq -r '.pushed // 0')
           echo "result=$RESULT" >> "$GITHUB_OUTPUT"
+          # Nếu pushed=0 và visual đã xử lý items, retry sau 15s
+          VISUAL_PROCESSED=$(echo '${{ steps.visual.outputs.result }}' | jq -r '.processed // 0')
+          if [ "$PUSHED" = "0" ] && [ "$VISUAL_PROCESSED" != "0" ]; then
+            echo "No items pushed but visual processed ${VISUAL_PROCESSED}, retrying in 15s..."
+            sleep 15
+            RESULT=$(curl -sf --max-time 300 -X POST \
+              "${{ secrets.CURATOR_API_URL }}/run-instagram" \
+              -H "X-API-Key: ${{ secrets.API_SECRET_KEY }}")
+            echo "$RESULT"
+            echo "result=$RESULT" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Telegram Notification
         if: always()
