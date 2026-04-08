@@ -156,9 +156,12 @@ class VisualCreator:
                 # Use category from AI data, fallback to Content Queue field
                 overlay_category = ai_data.get("category", "") or category
 
+                # Prefer title_short from AI for overlay (shorter, punchier)
+                overlay_title = ai_data.get("title_short", "") or title
+
                 public_id = f"nhatrang/{record_id}"
                 image_url = self._upload_to_cloudinary(
-                    photo_url, public_id, title, overlay_category, ai_data,
+                    photo_url, public_id, overlay_title, overlay_category, ai_data,
                 )
 
                 self.client.update_record("contentQueue", record_id, {
@@ -377,11 +380,11 @@ class VisualCreator:
                 )
                 draw.text((px + 12, py + 5), price_text, fill="white", font=font_tag)
 
-        # --- Bottom gradient ---
-        gradient_start = int(h * 0.45)
+        # --- Bottom gradient (compact — only bottom 35%) ---
+        gradient_start = int(h * 0.55)
         for y in range(gradient_start, h):
             progress = (y - gradient_start) / (h - gradient_start)
-            alpha = int(235 * progress)
+            alpha = int(220 * progress)
             draw.rectangle([(0, y), (w, y + 1)], fill=(0, 0, 0, alpha))
 
         # Switch to non-RGBA draw for text on gradient
@@ -407,15 +410,11 @@ class VisualCreator:
                 pill_x += (bbox[2] - bbox[0]) + 28
             text_bottom = pill_y - 12
 
-        # --- Title ---
+        # --- Title (short, max 50 chars) ---
         if title:
             title_y = text_bottom - 40
-            _draw_wrapped_text(draw, title[:60], (margin, title_y), font_title,
+            _draw_wrapped_text(draw, title[:50], (margin, title_y), font_title,
                                fill="white", max_width=w - 2 * margin)
-            text_bottom = title_y - 8
-
-        # --- Brand ---
-        draw.text((margin, text_bottom - 20), "NHA TRANG CURATOR", fill="#2d9e6b", font=font_brand)
 
         return img
 
