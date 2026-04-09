@@ -4,7 +4,6 @@ Uses Facebook cookies to scrape page posts via headless browser.
 Designed to run on GitHub Actions (Playwright pre-installed).
 """
 
-import json
 import logging
 import os
 import re
@@ -89,64 +88,142 @@ def scrape_page_posts(page_url: str, source_id: str, source_name: str, max_posts
                 page.evaluate("window.scrollBy(0, 1000)")
                 page.wait_for_timeout(2000)
 
-            # Extract posts from rendered DOM
+            # Extract posts using feed structure
+            # Facebook wraps each post in a container with role="article"
+            # or in feed items. We look for the feed and extract per-post.
             raw_posts = page.evaluate("""() => {
                 const results = [];
-                const seen = new Set();
+
+                // Strategy: find the feed container, then iterate post blocks.
+                // Each post block has a timestamp link that contains the real post URL.
+                // The post text is in div[dir="auto"] within that block.
+                // We anchor on timestamp links to identify individual posts.
+
+                // Strategy: find all div[dir="auto"] text blocks with substantial content,
+                // then for each, walk UP to find its post container and extract the
+                // post URL from a timestamp/permalink link WITHIN that container.
+
                 const allDivs = document.querySelectorAll('div[dir="auto"]');
+                const seenTextKeys = new Set();
+                const seenUrls = new Set();
 
                 for (const div of allDivs) {
-                    const text = div.innerText?.trim();
-                    if (!text || text.length < 30 || seen.has(text)) continue;
-                    // Skip UI elements
-                    if (text.startsWith('Write a comment') || text.startsWith('Like') || text.length > 5000) continue;
-                    seen.add(text);
+                    const rawText = div.innerText?.trim();
+                    if (!rawText || rawText.length < 30) continue;
 
-                    // Clean "See more" suffix
-                    const cleanText = text.replace(/\\n… See more$/, '').replace(/… See more$/, '');
+                    // Skip known UI patterns
+                    const lower = rawText.toLowerCase();
+                    if (lower.startsWith('write a') || lower.startsWith('like') ||
+                        lower.startsWith('comment') || lower.startsWith('share') ||
+                        lower.startsWith('all reactions') || lower.startsWith('most relevant') ||
+                        lower.startsWith('all comments') || lower.includes(' is at ') ||
+                        lower.startsWith('see translation') || rawText.length > 5000) continue;
 
-                    // Find post URL by walking up
+                    // Dedup by first 50 chars
+                    const textKey = rawText.substring(0, 50);
+                    if (seenTextKeys.has(textKey)) continue;
+
+                    // Clean text
+                    let postText = rawText
+                        .replace(/\\n… See more$/, '').replace(/… See more$/, '')
+                        .replace(/\\n… Xem thêm$/, '').replace(/… Xem thêm$/, '');
+
+                    // Walk UP to find post container (look for a large block with links)
+                    let postContainer = null;
+                    for (let p = div.parentElement; p && p !== document.body; p = p.parentElement) {
+                        // A post container typically:
+                        // - Has height > 200px
+                        // - Contains a link to a specific post (not nav links)
+                        const postLink = p.querySelector(
+                            'a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid"], ' +
+                            'a[href*="/photo/?fbid="], a[href*="/videos/"]'
+                        );
+                        if (postLink && p.offsetHeight > 200) {
+                            postContainer = p;
+                            break;
+                        }
+                    }
+
+                    // Extract URL from post-specific links WITHIN the container
                     let url = '';
-                    for (let p = div; p && p !== document.body; p = p.parentElement) {
-                        const link = p.querySelector('a[href*="/posts/"], a[href*="/permalink/"], a[href*="story_fbid"], a[href*="/reel/"], a[href*="/photo"]');
-                        if (link) { url = link.href; break; }
+                    if (postContainer) {
+                        // Priority order: posts/ > permalink > story_fbid > photo > videos
+                        const urlSelectors = [
+                            'a[href*="/posts/"]',
+                            'a[href*="/permalink/"]',
+                            'a[href*="story_fbid"]',
+                            'a[href*="/photo/?fbid="]',
+                            'a[href*="/videos/"]',
+                        ];
+                        for (const sel of urlSelectors) {
+                            const link = postContainer.querySelector(sel);
+                            if (link && link.href) {
+                                // Verify it's a real post link, not a nav link
+                                const h = link.href;
+                                if (h.includes('fbid=') || h.includes('/posts/') ||
+                                    h.includes('/permalink/') || h.includes('story_fbid') ||
+                                    h.includes('/videos/')) {
+                                    url = h;
+                                    break;
+                                }
+                            }
+                        }
                     }
 
-                    // Find image
+                    // Skip if no valid post URL found
+                    if (!url) continue;
+                    if (seenUrls.has(url)) continue;
+
+                    // Extract image from container
                     let image = '';
-                    for (let p = div; p && p !== document.body; p = p.parentElement) {
-                        const img = p.querySelector('img[src*="scontent"]');
-                        if (img && img.naturalWidth > 100) { image = img.src; break; }
+                    if (postContainer) {
+                        const imgs = postContainer.querySelectorAll('img[src*="scontent"]');
+                        for (const img of imgs) {
+                            if (img.naturalWidth > 150 && img.naturalHeight > 150) {
+                                image = img.src;
+                                break;
+                            }
+                        }
                     }
 
-                    // Find timestamp text
-                    let timeText = '';
-                    for (let p = div; p && p !== document.body; p = p.parentElement) {
-                        const timeEl = p.querySelector('a[role="link"] span[id]');
-                        if (timeEl) { timeText = timeEl.innerText; break; }
-                    }
-
-                    results.push({ text: cleanText, url, image, timeText });
+                    seenTextKeys.add(textKey);
+                    seenUrls.add(url);
+                    results.push({
+                        text: postText.substring(0, 2000),
+                        url: url,
+                        image: image,
+                    });
                 }
+
                 return results;
             }""")
 
         finally:
             browser.close()
 
-    # Normalize to standard format
+    # Normalize and deduplicate
     posts = []
     seen_texts = set()
     for raw in raw_posts:
         text = raw.get("text", "").strip()
-        if not text or text in seen_texts:
+        if not text:
             continue
-        seen_texts.add(text)
+
+        # Dedup by text similarity: skip if we already have a post
+        # whose text starts with the same 50 chars
+        text_key = text[:50]
+        if text_key in seen_texts:
+            continue
+        seen_texts.add(text_key)
+
+        url = _clean_url(raw.get("url", ""))
+        if not url:
+            continue
 
         posts.append({
             "title": text[:100],
             "content": text,
-            "url": _clean_url(raw.get("url", "")),
+            "url": url,
             "published_date": datetime.now(timezone.utc).isoformat(),
             "collected_at": datetime.now(timezone.utc).isoformat(),
             "source_name": source_name,
@@ -162,25 +239,32 @@ def scrape_page_posts(page_url: str, source_id: str, source_name: str, max_posts
 
 
 def _clean_url(url: str) -> str:
-    """Remove tracking params from Facebook URLs."""
+    """Clean Facebook post URL — remove tracking params."""
     if not url:
         return ""
-    # Remove __cft__ and other tracking
     url = re.sub(r'[?&]__cft__\[0\]=[^&]*', '', url)
     url = re.sub(r'[?&]__tn__=[^&]*', '', url)
+    url = re.sub(r'[?&]mibextid=[^&]*', '', url)
+    # Clean trailing ? or &
+    url = re.sub(r'[?&]$', '', url)
     return url
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    posts = scrape_page_posts(
-        "https://www.facebook.com/VinWondersNhaTrang",
-        source_id="test",
-        source_name="VinWonders Nha Trang",
-        max_posts=5,
-    )
-    for p in posts:
-        print(f"\n--- Post ---")
-        print(f"Title: {p['title']}")
-        print(f"URL: {p['url']}")
-        print(f"Image: {p['source_image_url'][:80] if p['source_image_url'] else 'None'}")
+
+    # Test with multiple source types
+    test_sources = [
+        ("https://www.facebook.com/VinWondersNhaTrang", "VinWonders"),
+        ("https://www.facebook.com/groups/anvatnhatrang", "Hội Ăn Vặt NT"),
+    ]
+    for url, name in test_sources:
+        print(f"\n{'='*60}")
+        print(f"Testing: {name}")
+        print(f"{'='*60}")
+        posts = scrape_page_posts(url, source_id="test", source_name=name, max_posts=5)
+        for p in posts:
+            print(f"\n  Title: {p['title'][:80]}")
+            print(f"  URL: {p['url'][:100]}")
+            print(f"  Image: {'Yes' if p['source_image_url'] else 'No'}")
+            print(f"  Content: {len(p['content'])} chars")

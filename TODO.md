@@ -54,10 +54,10 @@ Dates: (YYYY-MM-DD →) = started, (YYYY-MM-DD → YYYY-MM-DD) = completed, no d
 
 ### Phase 3 — Direct Scraper Quality Audit
 
-- [ ] SCR-12: Audit Direct scraper output quality — compare URLs, text, images vs Apify format. Check: post URLs valid (not photo/reel links), text is actual post content (not UI elements/HTML), images are post images (not avatars/ads), dedup works correctly with new URL format
-- [ ] SCR-13: Fix text extraction — current `div[dir="auto"]` selector may capture UI strings, comments, or ad text mixed with real posts. Need stricter parent-level filtering
-- [ ] SCR-14: Fix URL extraction — Direct scraper returns photo/reel links instead of canonical post URLs (`/posts/` or `permalink`). Apify returned clean post URLs. Need to normalize or extract correct post permalink
-- [ ] SCR-15: Filter duplicate text variants — same post text appears multiple times (full vs truncated "See more" versions). Need dedup by similarity, not just exact match
+- [x] SCR-12: Audit Direct scraper output — found: all 6 records had same URL, duplicate texts, group description mixed in, nav links instead of post URLs (2026-04-09 → 2026-04-09)
+- [x] SCR-13: Fix text extraction — anchor on post containers via timestamp links, filter UI patterns (Write a, Like, Comment, All reactions, See translation), take longest text per container (2026-04-09 → 2026-04-09)
+- [x] SCR-14: Fix URL extraction — prioritize `/posts/` > `/permalink/` > `story_fbid` > `/photo/?fbid=` > `/videos/`, verify links are within post container not nav bar (2026-04-09 → 2026-04-09)
+- [x] SCR-15: Fix duplicate text — dedup by first 50 chars + dedup by URL, "See more" cleaned before comparison (2026-04-09 → 2026-04-09)
 
 ### Phase 4 — Future Improvements
 
