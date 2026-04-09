@@ -46,15 +46,12 @@ Dates: (YYYY-MM-DD →) = started, (YYYY-MM-DD → YYYY-MM-DD) = completed, no d
 
 ### Phase 2 — Multi-Provider Pool (scale capacity)
 
-- [ ] SCR-5: Create `scraper/providers/base.py` — abstract BaseProvider with `fetch_posts()` and `is_available()` interface
-- [ ] SCR-6: Create `scraper/providers/apify_provider.py` — extract from `apify_fetcher.py`, keep 2-token rotation
-- [ ] SCR-7: Create `scraper/providers/phantom_provider.py` — PhantomBuster Facebook Page Posts integration, 2-key rotation
-- [ ] SCR-8: Create `scraper/provider_pool.py` — round-robin + fallback logic, usage tracking per provider
-- [ ] SCR-9: Refactor `scraper/main.py` — use `provider_pool.fetch()` instead of `ApifyFetcher.run_actor()`
-- [ ] SCR-10: Add `PHANTOMBUSTER_API_KEY` and `PHANTOMBUSTER_API_KEY_2` to GitHub Actions secrets
+- [x] SCR-5: Create `scraper/phantom_fetcher.py` — PhantomBuster Facebook Page Posts integration, 2-key rotation, same normalize format as Apify (2026-04-09 → 2026-04-09)
+- [x] SCR-6: Refactor `scraper/main.py` — multi-provider fallback: Apify → PhantomBuster, auto-skip unavailable providers (2026-04-09 → 2026-04-09)
+- [.] SCR-7: Setup PhantomBuster phantoms — create "Facebook Page Posts Extractor" on each account, add AGENT_IDs to .env (2026-04-09 →)
+- [ ] SCR-8: Add `PHANTOMBUSTER_API_KEY`, `PHANTOMBUSTER_API_KEY_2`, `PHANTOMBUSTER_AGENT_ID`, `PHANTOMBUSTER_AGENT_ID_2` to GitHub Actions secrets & Render env vars
 
-### Phase 3 — Direct Scraper (unlimited fallback)
+### Phase 3 — Future Providers
 
-- [ ] SCR-11: Create `scraper/providers/direct_provider.py` — facebook-scraper lib, self-hosted on GitHub Actions
-- [ ] SCR-12: Test direct scraper reliability on all 40 sources
-- [ ] SCR-13: Add direct_provider as lowest-priority fallback in provider_pool
+- [ ] SCR-9: Add direct facebook-scraper lib as third fallback provider (free, unlimited)
+- [ ] SCR-10: Add more Apify accounts or alternative actors when free tier unblocks

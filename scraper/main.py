@@ -18,8 +18,56 @@ log = logging.getLogger(__name__)
 SOURCES_PER_RUN = 3
 
 
+def _init_providers() -> list[tuple[str, object]]:
+    """Initialize available scraping providers in priority order.
+
+    Returns list of (name, fetcher) tuples. Skips providers that aren't configured.
+    """
+    providers = []
+
+    # Apify (primary)
+    try:
+        fetcher = ApifyFetcher()
+        remaining = fetcher.check_credit_balance()
+        if remaining >= 0.5:
+            providers.append(("Apify", fetcher))
+        else:
+            log.warning(f"Apify credit low (${remaining:.2f}), skipping")
+    except Exception as e:
+        log.warning(f"Apify not available: {e}")
+
+    # PhantomBuster (fallback)
+    try:
+        from phantom_fetcher import PhantomFetcher, PhantomRunError
+        fetcher = PhantomFetcher()
+        providers.append(("PhantomBuster", fetcher))
+    except Exception as e:
+        log.info(f"PhantomBuster not available: {e}")
+
+    return providers
+
+
+def _fetch_with_fallback(providers: list, facebook_url: str, source_id: str, source_name: str) -> list[dict]:
+    """Try each provider in order until one succeeds.
+
+    Returns list of normalized post items. Raises if all providers fail.
+    """
+    last_error = None
+    for name, fetcher in providers:
+        try:
+            items = fetcher.run_actor(facebook_url, source_id, source_name)
+            log.info(f"  [{name}] Got {len(items)} items from {source_name}")
+            return items
+        except Exception as e:
+            log.warning(f"  [{name}] Failed for {source_name}: {e}")
+            last_error = e
+            continue
+
+    raise ApifyRunError(f"All providers failed for {source_name}: {last_error}")
+
+
 def run_facebook_pipeline(client: AirtableClient, dedup: Deduplicator) -> dict:
-    """Run Facebook scraping with tier-based source selection.
+    """Run Facebook scraping with tier-based source selection and multi-provider fallback.
 
     Returns dict with: new_items, stats (tier info for notifications).
     """
@@ -38,22 +86,21 @@ def run_facebook_pipeline(client: AirtableClient, dedup: Deduplicator) -> dict:
         log.info("No sources due for scraping this run")
         return {"new_items": 0, "stats": stats}
 
-    fetcher = ApifyFetcher()
-    remaining = fetcher.check_credit_balance()
-    if remaining < 0.5:
-        log.critical(f"Apify credit critically low (${remaining:.2f}), skipping Facebook pipeline")
+    # Init providers (Apify → PhantomBuster)
+    providers = _init_providers()
+    if not providers:
+        log.critical("No scraping providers available")
         return {"new_items": 0, "stats": stats}
 
+    provider_names = [name for name, _ in providers]
+    log.info(f"Active providers: {', '.join(provider_names)}")
+
     total_new = 0
+    providers_used = []
     for source in sources:
         try:
-            items = fetcher.run_actor(
-                source["URL"],
-                source["id"],
-                source["Name"],
-            )
+            items = _fetch_with_fallback(providers, source["URL"], source["id"], source["Name"])
             new_items = dedup.filter_new_items(items)
-            # Skip items with empty content
             filtered = [i for i in new_items if i.get("content", "").strip()]
             skipped = len(new_items) - len(filtered)
             if skipped:
@@ -64,9 +111,9 @@ def run_facebook_pipeline(client: AirtableClient, dedup: Deduplicator) -> dict:
                     dedup.add_url(item["url"])
             total_new += len(filtered)
             client.update_source_last_checked(source["id"])
-            sleep(2)  # avoid spamming Apify
+            sleep(2)
         except ApifyRunError as e:
-            log.error(f"Apify failed for {source['Name']}: {e}")
+            log.error(f"All providers failed for {source['Name']}: {e}")
             continue
 
     return {"new_items": total_new, "stats": stats}
