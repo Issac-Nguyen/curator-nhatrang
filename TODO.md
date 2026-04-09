@@ -52,7 +52,14 @@ Dates: (YYYY-MM-DD →) = started, (YYYY-MM-DD → YYYY-MM-DD) = completed, no d
 - [x] SCR-8: Rewrite `facebook-scraper.yml` — run Playwright directly on GitHub Actions runner instead of via Render API (2026-04-09 → 2026-04-09)
 - [x] SCR-9: Add `FACEBOOK_COOKIES` + all required secrets to GitHub Actions (2026-04-09 → 2026-04-09)
 
-### Phase 3 — Future Providers
+### Phase 3 — Direct Scraper Quality Audit
 
-- [ ] SCR-12: Add more Apify accounts or alternative actors when free tier unblocks
-- [ ] SCR-13: Auto-detect cookie expiry and send Telegram alert before it expires
+- [ ] SCR-12: Audit Direct scraper output quality — compare URLs, text, images vs Apify format. Check: post URLs valid (not photo/reel links), text is actual post content (not UI elements/HTML), images are post images (not avatars/ads), dedup works correctly with new URL format
+- [ ] SCR-13: Fix text extraction — current `div[dir="auto"]` selector may capture UI strings, comments, or ad text mixed with real posts. Need stricter parent-level filtering
+- [ ] SCR-14: Fix URL extraction — Direct scraper returns photo/reel links instead of canonical post URLs (`/posts/` or `permalink`). Apify returned clean post URLs. Need to normalize or extract correct post permalink
+- [ ] SCR-15: Filter duplicate text variants — same post text appears multiple times (full vs truncated "See more" versions). Need dedup by similarity, not just exact match
+
+### Phase 4 — Future Improvements
+
+- [ ] SCR-16: Add more Apify accounts or alternative actors when free tier unblocks
+- [ ] SCR-17: Auto-detect cookie expiry and send Telegram alert before it expires
