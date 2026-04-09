@@ -8,34 +8,45 @@ jobs:
   run:
     runs-on: ubuntu-latest
     steps:
-      - name: Wake up Render service
-        run: |
-          for i in 1 2 3 4 5 6; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "${{ secrets.CURATOR_API_URL }}/health")
-            if [ "$STATUS" = "200" ]; then
-              echo "Service is up (attempt $i)"
-              break
-            fi
-            echo "Service not ready (HTTP $STATUS), waiting 10s... (attempt $i)"
-            sleep 10
-          done
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Call /run-facebook
-        id: api
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
         run: |
-          RESULT=$(curl -sf --max-time 300 -X POST \
-            "${{ secrets.CURATOR_API_URL }}/run-facebook" \
-            -H "X-API-Key: ${{ secrets.API_SECRET_KEY }}")
-          echo "$RESULT"
-          echo "result=$RESULT" >> "$GITHUB_OUTPUT"
+          pip install -r scraper/requirements.txt
+          pip install playwright
+          playwright install chromium --with-deps
+
+      - name: Run Facebook Scraper
+        id: scraper
+        env:
+          AIRTABLE_TOKEN: ${{ secrets.AIRTABLE_TOKEN }}
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          APIFY_TOKEN_2: ${{ secrets.APIFY_TOKEN_2 }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          FACEBOOK_COOKIES: ${{ secrets.FACEBOOK_COOKIES }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+        run: |
+          cd scraper
+          python main.py 2>&1 | tee /tmp/scraper.log
+          echo "result=$(tail -1 /tmp/scraper.log)" >> "$GITHUB_OUTPUT"
 
       - name: Telegram Notification
         if: always()
         run: |
-          if [ "${{ steps.api.outcome }}" = "success" ]; then
-            MSG="✅ Facebook Scraper: triggered (running in background)"
+          if [ "${{ steps.scraper.outcome }}" = "success" ]; then
+            LOG=$(tail -3 /tmp/scraper.log | tr '\n' ' ')
+            MSG="✅ Facebook Scraper (Direct): ${LOG}"
           else
-            MSG="❌ Facebook Scraper: API call failed"
+            MSG="❌ Facebook Scraper (Direct): failed"
           fi
           curl -sf -X POST \
             "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \

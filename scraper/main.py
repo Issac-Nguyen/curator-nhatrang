@@ -44,7 +44,25 @@ def _init_providers() -> list[tuple[str, object]]:
     except Exception as e:
         log.info(f"PhantomBuster not available: {e}")
 
+    # Direct scraper via Playwright + Facebook cookies (fallback)
+    try:
+        from fb_direct_scraper import FB_COOKIE_STRING
+        if FB_COOKIE_STRING:
+            providers.append(("Direct", _DirectProvider()))
+        else:
+            log.info("Direct scraper not available: FACEBOOK_COOKIES not set")
+    except Exception as e:
+        log.info(f"Direct scraper not available: {e}")
+
     return providers
+
+
+class _DirectProvider:
+    """Wrapper to match the run_actor() interface for fb_direct_scraper."""
+
+    def run_actor(self, facebook_url: str, source_id: str, source_name: str) -> list[dict]:
+        from fb_direct_scraper import scrape_page_posts
+        return scrape_page_posts(facebook_url, source_id, source_name, max_posts=10)
 
 
 def _fetch_with_fallback(providers: list, facebook_url: str, source_id: str, source_name: str) -> list[dict]:

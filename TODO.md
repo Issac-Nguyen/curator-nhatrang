@@ -48,10 +48,13 @@ Dates: (YYYY-MM-DD →) = started, (YYYY-MM-DD → YYYY-MM-DD) = completed, no d
 
 - [x] SCR-5: Create `scraper/phantom_fetcher.py` — PhantomBuster Facebook Page Posts integration, 2-key rotation, same normalize format as Apify (2026-04-09 → 2026-04-09)
 - [x] SCR-6: Refactor `scraper/main.py` — multi-provider fallback: Apify → PhantomBuster, auto-skip unavailable providers (2026-04-09 → 2026-04-09)
-- [.] SCR-7: Setup PhantomBuster phantoms — create "Facebook Page Posts Extractor" on each account, add AGENT_IDs to .env (2026-04-09 →)
-- [ ] SCR-8: Add `PHANTOMBUSTER_API_KEY`, `PHANTOMBUSTER_API_KEY_2`, `PHANTOMBUSTER_AGENT_ID`, `PHANTOMBUSTER_AGENT_ID_2` to GitHub Actions secrets & Render env vars
+- [!] SCR-7: PhantomBuster — no "Facebook Page Posts" phantom available in store, blocked
+- [x] SCR-8: Create `scraper/fb_direct_scraper.py` — Playwright + Facebook cookies, scrape rendered DOM, normalize to same format (2026-04-09 → 2026-04-09)
+- [x] SCR-9: Add Direct scraper as fallback provider in `main.py` — Apify → PhantomBuster → Direct (2026-04-09 → 2026-04-09)
+- [x] SCR-10: Rewrite `facebook-scraper.yml` — run Playwright directly on GitHub Actions runner instead of via Render API (2026-04-09 → 2026-04-09)
+- [ ] SCR-11: Add `FACEBOOK_COOKIES` to GitHub Actions secrets (c_user + xs + fr + datr, expires ~90 days)
 
 ### Phase 3 — Future Providers
 
-- [ ] SCR-9: Add direct facebook-scraper lib as third fallback provider (free, unlimited)
-- [ ] SCR-10: Add more Apify accounts or alternative actors when free tier unblocks
+- [ ] SCR-12: Add more Apify accounts or alternative actors when free tier unblocks
+- [ ] SCR-13: Auto-detect cookie expiry and send Telegram alert before it expires
