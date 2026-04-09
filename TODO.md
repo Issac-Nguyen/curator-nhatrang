@@ -46,13 +46,11 @@ Dates: (YYYY-MM-DD →) = started, (YYYY-MM-DD → YYYY-MM-DD) = completed, no d
 
 ### Phase 2 — Multi-Provider Pool (scale capacity)
 
-- [x] SCR-5: Create `scraper/phantom_fetcher.py` — PhantomBuster Facebook Page Posts integration, 2-key rotation, same normalize format as Apify (2026-04-09 → 2026-04-09)
-- [x] SCR-6: Refactor `scraper/main.py` — multi-provider fallback: Apify → PhantomBuster, auto-skip unavailable providers (2026-04-09 → 2026-04-09)
-- [!] SCR-7: PhantomBuster — no "Facebook Page Posts" phantom available in store, blocked
-- [x] SCR-8: Create `scraper/fb_direct_scraper.py` — Playwright + Facebook cookies, scrape rendered DOM, normalize to same format (2026-04-09 → 2026-04-09)
-- [x] SCR-9: Add Direct scraper as fallback provider in `main.py` — Apify → PhantomBuster → Direct (2026-04-09 → 2026-04-09)
-- [x] SCR-10: Rewrite `facebook-scraper.yml` — run Playwright directly on GitHub Actions runner instead of via Render API (2026-04-09 → 2026-04-09)
-- [ ] SCR-11: Add `FACEBOOK_COOKIES` to GitHub Actions secrets (c_user + xs + fr + datr, expires ~90 days)
+- [!] SCR-5: PhantomBuster — no "Facebook Page Posts" phantom in store, only LinkedIn/Google/Instagram phantoms available. API keys removed, phantom_fetcher.py removed (2026-04-09 → 2026-04-09)
+- [x] SCR-6: Create `scraper/fb_direct_scraper.py` — Playwright + Facebook cookies, scrape rendered DOM, normalize to same format (2026-04-09 → 2026-04-09)
+- [x] SCR-7: Refactor `scraper/main.py` — multi-provider fallback: Apify → Direct, auto-skip unavailable providers (2026-04-09 → 2026-04-09)
+- [x] SCR-8: Rewrite `facebook-scraper.yml` — run Playwright directly on GitHub Actions runner instead of via Render API (2026-04-09 → 2026-04-09)
+- [x] SCR-9: Add `FACEBOOK_COOKIES` + all required secrets to GitHub Actions (2026-04-09 → 2026-04-09)
 
 ### Phase 3 — Future Providers
 

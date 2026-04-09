@@ -36,14 +36,6 @@ def _init_providers() -> list[tuple[str, object]]:
     except Exception as e:
         log.warning(f"Apify not available: {e}")
 
-    # PhantomBuster (fallback)
-    try:
-        from phantom_fetcher import PhantomFetcher, PhantomRunError
-        fetcher = PhantomFetcher()
-        providers.append(("PhantomBuster", fetcher))
-    except Exception as e:
-        log.info(f"PhantomBuster not available: {e}")
-
     # Direct scraper via Playwright + Facebook cookies (fallback)
     try:
         from fb_direct_scraper import FB_COOKIE_STRING
