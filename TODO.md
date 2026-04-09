@@ -59,7 +59,16 @@ Dates: (YYYY-MM-DD →) = started, (YYYY-MM-DD → YYYY-MM-DD) = completed, no d
 - [x] SCR-14: Fix URL extraction — prioritize `/posts/` > `/permalink/` > `story_fbid` > `/photo/?fbid=` > `/videos/`, verify links are within post container not nav bar (2026-04-09 → 2026-04-09)
 - [x] SCR-15: Fix duplicate text — dedup by first 50 chars + dedup by URL, "See more" cleaned before comparison (2026-04-09 → 2026-04-09)
 
-### Phase 4 — Future Improvements
+### Phase 4 — Cookie & Session Management
 
-- [ ] SCR-16: Add more Apify accounts or alternative actors when free tier unblocks
-- [ ] SCR-17: Auto-detect cookie expiry and send Telegram alert before it expires
+> **Root cause cookie expire nhanh:** Facebook invalidate session khi detect login từ IP/location khác (VN → US GitHub Actions). Không phải hết hạn thời gian — cookie `xs` valid đến 2027 nhưng bị revoke ngay khi dùng từ US IP.
+
+- [x] SCR-16: Telegram đã báo cookie expired — Direct scraper detect `/login` redirect và báo lỗi qua Telegram (2026-04-09 → 2026-04-09)
+- [ ] SCR-17: Fix IP mismatch — options: (a) dùng proxy Vietnam trong GitHub Actions, (b) chạy scraper trên Render (Vietnam-closer server), (c) dùng Facebook account phụ chỉ để scrape (ít bị flag), (d) self-hosted runner tại VN
+- [ ] SCR-18: Add cookie health check — chạy test request đầu pipeline, nếu expired thì skip Direct và gửi Telegram alert riêng: "⚠️ Facebook cookies expired, cần re-login"
+- [ ] SCR-19: Auto cookie refresh — explore: dùng Playwright login flow tự động trên self-hosted runner hoặc scheduled job
+
+### Phase 5 — Future Improvements
+
+- [ ] SCR-20: Add more Apify accounts or alternative actors when free tier unblocks
+- [ ] SCR-21: Explore Facebook Graph API with Page token (official, stable, no cookie needed) — cần tạo Facebook App + xin Page Public Content Access permission
