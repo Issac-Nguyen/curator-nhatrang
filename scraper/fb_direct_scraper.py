@@ -24,8 +24,70 @@ FB_COOKIE_STRING = os.getenv("FACEBOOK_COOKIES", "")
 WEBSHARE_API_KEY = os.getenv("WEBSHARE_API_KEY", "")
 
 
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+
+
 class DirectScrapeError(Exception):
     pass
+
+
+def check_cookie_health() -> bool:
+    """Quick check if Facebook cookies are still valid via HTTP request through proxy.
+
+    Returns True if valid, False if expired. Sends Telegram alert on expiry.
+    """
+    if not FB_COOKIE_STRING:
+        return False
+    try:
+        import requests as req
+        import urllib.parse
+        cookies = {}
+        for part in FB_COOKIE_STRING.split(";"):
+            part = part.strip()
+            if "=" in part:
+                k, v = part.split("=", 1)
+                cookies[k.strip()] = urllib.parse.unquote(v.strip())
+
+        proxy_url = _get_proxy()
+        proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else {}
+
+        resp = req.get(
+            "https://www.facebook.com/me",
+            cookies=cookies,
+            proxies=proxies,
+            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"},
+            timeout=15,
+            allow_redirects=False,
+        )
+        # If redirected to login → expired
+        if resp.status_code in (301, 302) and "/login" in resp.headers.get("Location", ""):
+            log.warning("[Direct] Facebook cookies EXPIRED — redirected to login")
+            _send_cookie_alert()
+            return False
+        log.info("[Direct] Facebook cookies valid")
+        return True
+    except Exception as e:
+        log.warning(f"[Direct] Cookie health check failed: {e}")
+        return True  # Assume valid if check fails (don't block pipeline)
+
+
+def _send_cookie_alert():
+    """Send Telegram alert when cookies expire."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    try:
+        import requests as req
+        req.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            data={
+                "chat_id": TELEGRAM_CHAT_ID,
+                "text": "⚠️ Facebook cookies EXPIRED!\n\nDirect scraper sẽ không hoạt động cho đến khi re-login.\nCần mở browser → login Facebook → extract cookies mới.",
+            },
+            timeout=10,
+        )
+    except Exception:
+        pass
 
 
 def _parse_cookies(cookie_str: str) -> list[dict]:

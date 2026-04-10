@@ -28,9 +28,9 @@ Dates: (YYYY-MM-DD →) = started, (YYYY-MM-DD → YYYY-MM-DD) = completed, no d
 
 ### Priority 3 — Caption Optimization
 
-- [ ] VIS-9: Shorten Draft VN caption to 2-3 sentences max — current 3-4 sentences too long for IG feed preview
-- [ ] VIS-10: Move hashtags to first comment instead of caption — cleaner look, same discoverability
-- [ ] VIS-11: Add CTA line at end of caption — "Save for later" / "Tag someone" to boost engagement
+- [x] VIS-9: Shorten Draft VN caption to 2-3 sentences — changed AI prompt from "3-4 câu" to "2-3 câu NGẮN GỌN", separated hashtags into own field (2026-04-10 → 2026-04-10)
+- [x] VIS-10: Move hashtags to first comment — stripped from caption, posted as first comment via `_post_hashtag_comment()` before source link comment (2026-04-10 → 2026-04-10)
+- [x] VIS-11: Add CTA line — AI prompt now ends with CTA examples: "Save lại khi cần nha!", "Tag bạn bè cùng khám phá!", "Ai đã thử chưa?" (2026-04-10 → 2026-04-10)
 
 ## Smart Scraping — Tier Scheduling + Multi-Provider (2026-04-08 →)
 
@@ -66,8 +66,8 @@ Dates: (YYYY-MM-DD →) = started, (YYYY-MM-DD → YYYY-MM-DD) = completed, no d
 - [x] SCR-16: Telegram đã báo cookie expired — Direct scraper detect `/login` redirect và báo lỗi qua Telegram (2026-04-09 → 2026-04-09)
 - [x] SCR-17: Fix IP mismatch — integrated Webshare.io proxy (free tier, JP proxy) into Playwright. Facebook accepts JP IP, cookie not revoked. Auto-fetch proxy via API each run (2026-04-10 → 2026-04-10)
 - [x] SCR-18: Verified end-to-end on GitHub Actions — Apify 403 → fallback Direct + JP proxy → 3 posts scraped from Skylight Nha Trang → Airtable created (2026-04-10 → 2026-04-10)
-- [ ] SCR-19: Add cookie health check — chạy test request đầu pipeline, nếu expired thì skip Direct và gửi Telegram alert riêng: "⚠️ Facebook cookies expired, cần re-login"
-- [ ] SCR-19: Auto cookie refresh — explore: dùng Playwright login flow tự động trên self-hosted runner hoặc scheduled job
+- [x] SCR-19: Add cookie health check — `check_cookie_health()` runs before adding Direct provider, checks `/me` redirect via proxy, sends Telegram alert if expired (2026-04-10 → 2026-04-10)
+- [ ] SCR-20: Auto cookie refresh — explore: dùng Playwright login flow tự động trên self-hosted runner hoặc scheduled job
 
 ### Phase 5 — Future Improvements
 

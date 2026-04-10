@@ -164,6 +164,7 @@ class InstagramPublisher:
             try:
                 media_id = self._publish_photo(caption, image_url)
                 log.info(f"  [Published] {title} → IG Media ID: {media_id}")
+                self._post_hashtag_comment(record, media_id)
                 self._post_source_link_comment(record, media_id)
                 self._cleanup_after_publish(record, record_id, media_id)
                 stats["pushed"] += 1
@@ -176,13 +177,48 @@ class InstagramPublisher:
         return stats
 
     def _build_caption(self, record: dict) -> str:
-        """Ghép Draft VN + Draft EN thành caption."""
+        """Ghép Draft VN + Draft EN thành caption (hashtags removed — go to first comment)."""
         vn = record["fields"].get("Draft VN", "").strip()
         en = record["fields"].get("Draft EN", "").strip()
         if not vn and not en:
             return ""
-        parts = [p for p in [vn, en] if p]
+        # Strip hashtag lines from caption (they go to first comment now)
+        vn_clean = "\n".join(l for l in vn.splitlines() if not l.strip().startswith("#")) if vn else ""
+        en_clean = "\n".join(l for l in en.splitlines() if not l.strip().startswith("#")) if en else ""
+        parts = [p.strip() for p in [vn_clean, en_clean] if p.strip()]
         return "\n\n".join(parts)
+
+    def _extract_hashtags(self, record: dict) -> str:
+        """Extract hashtags from Draft VN + Draft EN for first comment."""
+        vn = record["fields"].get("Draft VN", "").strip()
+        en = record["fields"].get("Draft EN", "").strip()
+        tags = []
+        for text in [vn, en]:
+            if not text:
+                continue
+            for line in text.splitlines():
+                line = line.strip()
+                if line.startswith("#"):
+                    tags.append(line)
+        return " ".join(tags) if tags else ""
+
+    def _post_hashtag_comment(self, record: dict, media_id: str) -> None:
+        """Post hashtags as first comment (cleaner caption, same discoverability)."""
+        hashtags = self._extract_hashtags(record)
+        if not hashtags:
+            return
+        try:
+            resp = requests.post(
+                f"{GRAPH_API_BASE}/{media_id}/comments",
+                data={"message": hashtags, "access_token": self.access_token},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                log.info(f"  [Comment] Posted hashtags")
+            else:
+                log.warning(f"  [Comment] Hashtags failed: {resp.json()}")
+        except Exception as e:
+            log.warning(f"  [Comment] Hashtags error: {e}")
 
     def _post_source_link_comment(self, record: dict, media_id: str) -> None:
         """Post a comment with the source URL on the published media."""

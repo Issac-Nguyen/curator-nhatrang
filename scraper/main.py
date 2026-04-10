@@ -38,9 +38,12 @@ def _init_providers() -> list[tuple[str, object]]:
 
     # Direct scraper via Playwright + Facebook cookies (fallback)
     try:
-        from fb_direct_scraper import FB_COOKIE_STRING
+        from fb_direct_scraper import FB_COOKIE_STRING, check_cookie_health
         if FB_COOKIE_STRING:
-            providers.append(("Direct", _DirectProvider()))
+            if check_cookie_health():
+                providers.append(("Direct", _DirectProvider()))
+            else:
+                log.warning("Direct scraper skipped: Facebook cookies expired (Telegram alert sent)")
         else:
             log.info("Direct scraper not available: FACEBOOK_COOKIES not set")
     except Exception as e:
