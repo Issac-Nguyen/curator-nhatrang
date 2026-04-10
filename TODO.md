@@ -65,7 +65,8 @@ Dates: (YYYY-MM-DD →) = started, (YYYY-MM-DD → YYYY-MM-DD) = completed, no d
 
 - [x] SCR-16: Telegram đã báo cookie expired — Direct scraper detect `/login` redirect và báo lỗi qua Telegram (2026-04-09 → 2026-04-09)
 - [x] SCR-17: Fix IP mismatch — integrated Webshare.io proxy (free tier, JP proxy) into Playwright. Facebook accepts JP IP, cookie not revoked. Auto-fetch proxy via API each run (2026-04-10 → 2026-04-10)
-- [ ] SCR-18: Add cookie health check — chạy test request đầu pipeline, nếu expired thì skip Direct và gửi Telegram alert riêng: "⚠️ Facebook cookies expired, cần re-login"
+- [x] SCR-18: Verified end-to-end on GitHub Actions — Apify 403 → fallback Direct + JP proxy → 3 posts scraped from Skylight Nha Trang → Airtable created (2026-04-10 → 2026-04-10)
+- [ ] SCR-19: Add cookie health check — chạy test request đầu pipeline, nếu expired thì skip Direct và gửi Telegram alert riêng: "⚠️ Facebook cookies expired, cần re-login"
 - [ ] SCR-19: Auto cookie refresh — explore: dùng Playwright login flow tự động trên self-hosted runner hoặc scheduled job
 
 ### Phase 5 — Future Improvements
