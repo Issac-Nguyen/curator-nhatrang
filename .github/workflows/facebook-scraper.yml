@@ -30,6 +30,7 @@ jobs:
           APIFY_TOKEN_2: ${{ secrets.APIFY_TOKEN_2 }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           FACEBOOK_COOKIES: ${{ secrets.FACEBOOK_COOKIES }}
+          WEBSHARE_API_KEY: ${{ secrets.WEBSHARE_API_KEY }}
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}

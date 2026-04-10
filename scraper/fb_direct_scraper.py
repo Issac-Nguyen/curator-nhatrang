@@ -20,6 +20,9 @@ log = logging.getLogger(__name__)
 # Cookie string from env: "c_user=XXX; xs=YYY; fr=ZZZ; datr=WWW"
 FB_COOKIE_STRING = os.getenv("FACEBOOK_COOKIES", "")
 
+# Webshare proxy API key (free tier, used to avoid Facebook datacenter IP blocks)
+WEBSHARE_API_KEY = os.getenv("WEBSHARE_API_KEY", "")
+
 
 class DirectScrapeError(Exception):
     pass
@@ -40,6 +43,31 @@ def _parse_cookies(cookie_str: str) -> list[dict]:
             "path": "/",
         })
     return cookies
+
+
+def _get_proxy() -> str | None:
+    """Fetch a proxy from Webshare.io API. Returns proxy URL or None."""
+    if not WEBSHARE_API_KEY:
+        return None
+    try:
+        import requests as req
+        resp = req.get(
+            "https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page_size=10",
+            headers={"Authorization": f"Token {WEBSHARE_API_KEY}"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        proxies = resp.json().get("results", [])
+        if not proxies:
+            log.warning("[Direct] No proxies available from Webshare")
+            return None
+        # Prefer JP (closest to VN), then any
+        proxy = next((p for p in proxies if p["country_code"] == "JP"), proxies[0])
+        url = f"http://{proxy['username']}:{proxy['password']}@{proxy['proxy_address']}:{proxy['port']}"
+        return url
+    except Exception as e:
+        log.warning(f"[Direct] Failed to fetch proxy: {e}")
+        return None
 
 
 def scrape_page_posts(page_url: str, source_id: str, source_name: str, max_posts: int = 10) -> list[dict]:
@@ -65,8 +93,26 @@ def scrape_page_posts(page_url: str, source_id: str, source_name: str, max_posts
 
     log.info(f"[Direct] Scraping: {source_name} ({page_url})")
 
+    proxy_server = _get_proxy()
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        launch_args = {"headless": True}
+        if proxy_server:
+            # Parse http://user:pass@host:port into Playwright proxy format
+            import re as _re
+            m = _re.match(r'https?://([^:]+):([^@]+)@([^:]+):(\d+)', proxy_server)
+            if m:
+                launch_args["proxy"] = {
+                    "server": f"http://{m.group(3)}:{m.group(4)}",
+                    "username": m.group(1),
+                    "password": m.group(2),
+                }
+                log.info(f"[Direct] Using proxy: {m.group(3)}:{m.group(4)}")
+            else:
+                launch_args["proxy"] = {"server": proxy_server}
+                log.info(f"[Direct] Using proxy: {proxy_server}")
+
+        browser = p.chromium.launch(**launch_args)
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
             locale="vi-VN",
