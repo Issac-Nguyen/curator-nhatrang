@@ -31,7 +31,11 @@ def _clean_token(t: str | None) -> str | None:
     return cleaned if cleaned else None
 
 
-APIFY_TOKENS = [c for c in [_clean_token(os.getenv("APIFY_TOKEN")), _clean_token(os.getenv("APIFY_TOKEN_2"))] if c]
+APIFY_TOKENS = [c for c in [
+    _clean_token(os.getenv("APIFY_TOKEN")),
+    _clean_token(os.getenv("APIFY_TOKEN_2")),
+    _clean_token(os.getenv("APIFY_TOKEN_3")),
+] if c]
 ACTOR_ID = "apify~facebook-posts-scraper"
 BASE_URL = "https://api.apify.com/v2"
 POLL_INTERVAL = 5   # seconds between status checks
