@@ -20,8 +20,11 @@ log = logging.getLogger(__name__)
 # Cookie string from env: "c_user=XXX; xs=YYY; fr=ZZZ; datr=WWW"
 FB_COOKIE_STRING = os.getenv("FACEBOOK_COOKIES", "")
 
-# Webshare proxy API key (free tier, used to avoid Facebook datacenter IP blocks)
-WEBSHARE_API_KEY = os.getenv("WEBSHARE_API_KEY", "")
+# Webshare proxy API keys (free tier = 1GB/mo each; rotate on exhaustion).
+WEBSHARE_API_KEYS = [k for k in [
+    os.getenv("WEBSHARE_API_KEY", "").strip(),
+    os.getenv("WEBSHARE_API_KEY_2", "").strip(),
+] if k]
 
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -108,28 +111,70 @@ def _parse_cookies(cookie_str: str) -> list[dict]:
 
 
 def _get_proxy() -> str | None:
-    """Fetch a proxy from Webshare.io API. Returns proxy URL or None."""
-    if not WEBSHARE_API_KEY:
+    """Fetch a proxy from Webshare.io API. Tries each key until one works.
+
+    Rotation triggers when a key's bandwidth is exhausted: Webshare returns proxies
+    but they 402 on use, OR the list API itself starts failing. We detect exhaustion
+    by checking the subscription's bandwidth usage before returning a proxy.
+    """
+    if not WEBSHARE_API_KEYS:
         return None
-    try:
-        import requests as req
-        resp = req.get(
-            "https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page_size=10",
-            headers={"Authorization": f"Token {WEBSHARE_API_KEY}"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        proxies = resp.json().get("results", [])
-        if not proxies:
-            log.warning("[Direct] No proxies available from Webshare")
-            return None
-        # Prefer JP (closest to VN), then any
-        proxy = next((p for p in proxies if p["country_code"] == "JP"), proxies[0])
-        url = f"http://{proxy['username']}:{proxy['password']}@{proxy['proxy_address']}:{proxy['port']}"
-        return url
-    except Exception as e:
-        log.warning(f"[Direct] Failed to fetch proxy: {e}")
-        return None
+    import requests as req
+    for idx, key in enumerate(WEBSHARE_API_KEYS):
+        try:
+            # Check bandwidth usage vs limit — free tier = 1GB/mo.
+            # If exhausted, proxy tunnel returns 402 (silent failure at browser level).
+            sub = req.get(
+                "https://proxy.webshare.io/api/v2/subscription/",
+                headers={"Authorization": f"Token {key}"},
+                timeout=10,
+            )
+            if sub.status_code == 200:
+                sub_data = sub.json()
+                if sub_data.get("throttled") or sub_data.get("paused"):
+                    log.warning(f"[Direct] Webshare key #{idx+1} throttled/paused, rotating")
+                    continue
+                plan_id = sub_data.get("plan")
+                if plan_id:
+                    plan = req.get(
+                        f"https://proxy.webshare.io/api/v2/subscription/plan/{plan_id}/",
+                        headers={"Authorization": f"Token {key}"},
+                        timeout=10,
+                    )
+                    stats = req.get(
+                        "https://proxy.webshare.io/api/v2/stats/aggregate/?timespan=month",
+                        headers={"Authorization": f"Token {key}"},
+                        timeout=10,
+                    )
+                    if plan.status_code == 200 and stats.status_code == 200:
+                        limit_gb = plan.json().get("bandwidth_limit", 0)  # GB
+                        used_bytes = stats.json().get("bandwidth_total", 0)
+                        used_gb = used_bytes / (1024 ** 3)
+                        log.info(f"[Direct] Webshare key #{idx+1}: {used_gb:.2f}/{limit_gb:.2f} GB used")
+                        if limit_gb > 0 and used_gb >= limit_gb * 0.98:
+                            log.warning(f"[Direct] Webshare key #{idx+1} exhausted, rotating")
+                            continue
+
+            resp = req.get(
+                "https://proxy.webshare.io/api/v2/proxy/list/?mode=direct&page_size=10",
+                headers={"Authorization": f"Token {key}"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            proxies = resp.json().get("results", [])
+            if not proxies:
+                log.warning(f"[Direct] Webshare key #{idx+1}: no proxies, rotating")
+                continue
+            proxy = next((p for p in proxies if p["country_code"] == "JP"), proxies[0])
+            url = f"http://{proxy['username']}:{proxy['password']}@{proxy['proxy_address']}:{proxy['port']}"
+            if idx > 0:
+                log.info(f"[Direct] Using Webshare key #{idx+1} (rotated)")
+            return url
+        except Exception as e:
+            log.warning(f"[Direct] Webshare key #{idx+1} failed: {e}")
+            continue
+    log.warning("[Direct] All Webshare keys exhausted")
+    return None
 
 
 def scrape_page_posts(page_url: str, source_id: str, source_name: str, max_posts: int = 10) -> list[dict]:
@@ -181,6 +226,15 @@ def scrape_page_posts(page_url: str, source_id: str, source_name: str, max_posts
             viewport={"width": 1280, "height": 900},
         )
         context.add_cookies(cookies)
+
+        # Block bandwidth-heavy resources (images/video/fonts) to conserve Webshare 1GB/mo quota.
+        # Keep stylesheets (needed for offsetHeight layout) and scripts (FB SPA requires JS).
+        def _block_heavy(route):
+            if route.request.resource_type in ("image", "media", "font"):
+                route.abort()
+            else:
+                route.continue_()
+        context.route("**/*", _block_heavy)
 
         page = context.new_page()
         try:
@@ -282,15 +336,18 @@ def scrape_page_posts(page_url: str, source_id: str, source_name: str, max_posts
                     if (!url) continue;
                     if (seenUrls.has(url)) continue;
 
-                    // Extract image from container
+                    // Extract image from container.
+                    // Images are blocked at network level (bandwidth savings), so naturalWidth=0.
+                    // Filter by URL heuristics instead: FB small thumbnails use p*x* size hints in URL.
                     let image = '';
                     if (postContainer) {
                         const imgs = postContainer.querySelectorAll('img[src*="scontent"]');
                         for (const img of imgs) {
-                            if (img.naturalWidth > 150 && img.naturalHeight > 150) {
-                                image = img.src;
-                                break;
-                            }
+                            const src = img.src || '';
+                            // Skip tiny avatars / reaction icons (usually p40x40, p60x60, etc.)
+                            if (/\\/p\\d{2,3}x\\d{2,3}\\//.test(src)) continue;
+                            image = src;
+                            break;
                         }
                     }
 
