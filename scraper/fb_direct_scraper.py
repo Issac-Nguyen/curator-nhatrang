@@ -167,6 +167,22 @@ def _get_proxy() -> str | None:
                 continue
             proxy = next((p for p in proxies if p["country_code"] == "JP"), proxies[0])
             url = f"http://{proxy['username']}:{proxy['password']}@{proxy['proxy_address']}:{proxy['port']}"
+
+            # Live-test proxy: Webshare bandwidth stats can be stale/misleading.
+            # A 402 at actual CONNECT time means the key is really dead.
+            try:
+                test = req.get(
+                    "https://httpbin.org/ip",
+                    proxies={"http": url, "https": url},
+                    timeout=10,
+                )
+                if test.status_code != 200:
+                    log.warning(f"[Direct] Webshare key #{idx+1} proxy test failed: HTTP {test.status_code}, rotating")
+                    continue
+            except Exception as e:
+                log.warning(f"[Direct] Webshare key #{idx+1} proxy test failed: {e}, rotating")
+                continue
+
             if idx > 0:
                 log.info(f"[Direct] Using Webshare key #{idx+1} (rotated)")
             return url
