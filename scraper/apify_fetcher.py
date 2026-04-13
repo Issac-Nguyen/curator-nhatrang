@@ -65,15 +65,21 @@ class ApifyFetcher:
         return True
 
     def _request(self, method: str, url: str, **kwargs) -> dict:
-        resp = requests.request(method, url, headers=self.headers, **kwargs)
-        if resp.status_code == 429:
-            log.warning(f"Apify rate limit, sleeping {RATE_LIMIT_SLEEP}s")
-            time.sleep(RATE_LIMIT_SLEEP)
+        # Try current token, then rotate through all remaining tokens on 403.
+        attempts = 0
+        max_attempts = len(APIFY_TOKENS)
+        while True:
             resp = requests.request(method, url, headers=self.headers, **kwargs)
-        if resp.status_code == 403 and self._rotate_token():
-            resp = requests.request(method, url, headers=self.headers, **kwargs)
-        resp.raise_for_status()
-        return resp.json()
+            if resp.status_code == 429:
+                log.warning(f"Apify rate limit, sleeping {RATE_LIMIT_SLEEP}s")
+                time.sleep(RATE_LIMIT_SLEEP)
+                resp = requests.request(method, url, headers=self.headers, **kwargs)
+            attempts += 1
+            if resp.status_code == 403 and attempts < max_attempts:
+                self._rotate_token()
+                continue
+            resp.raise_for_status()
+            return resp.json()
 
     def check_credit_balance(self) -> float:
         """Log current credit balance. Returns remaining USD."""
