@@ -143,7 +143,8 @@ class ApifyFetcher:
         if posts:
             sample = posts[0]
             log.info(f"[DEBUG] Sample post keys for {source_name}: {sorted(sample.keys())}")
-            log.info(f"[DEBUG] Sample text/message/body: text={repr(sample.get('text'))[:100]} message={repr(sample.get('message'))[:100]} body={repr(sample.get('body'))[:100]}")
+            if "error" in sample:
+                log.warning(f"[DEBUG] Actor error for {source_name}: error={sample.get('error')} desc={sample.get('errorDescription')}")
 
         # 4. Normalize to standard format
         return [self._normalize(post, source_id, source_name) for post in posts if self._get_url(post)]
