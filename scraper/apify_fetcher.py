@@ -35,6 +35,7 @@ APIFY_TOKENS = [c for c in [
     _clean_token(os.getenv("APIFY_TOKEN")),
     _clean_token(os.getenv("APIFY_TOKEN_2")),
     _clean_token(os.getenv("APIFY_TOKEN_3")),
+    _clean_token(os.getenv("APIFY_TOKEN_4")),
 ] if c]
 ACTOR_ID = "apify~facebook-posts-scraper"
 BASE_URL = "https://api.apify.com/v2"
@@ -139,6 +140,10 @@ class ApifyFetcher:
         items_data = self._request("GET", f"{BASE_URL}/actor-runs/{run_id}/dataset/items")
         posts = items_data if isinstance(items_data, list) else items_data.get("items", [])
         log.info(f"Actor returned {len(posts)} posts for {source_name}")
+        if posts:
+            sample = posts[0]
+            log.info(f"[DEBUG] Sample post keys for {source_name}: {sorted(sample.keys())}")
+            log.info(f"[DEBUG] Sample text/message/body: text={repr(sample.get('text'))[:100]} message={repr(sample.get('message'))[:100]} body={repr(sample.get('body'))[:100]}")
 
         # 4. Normalize to standard format
         return [self._normalize(post, source_id, source_name) for post in posts if self._get_url(post)]
