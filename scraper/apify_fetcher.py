@@ -139,12 +139,13 @@ class ApifyFetcher:
         # 3. Fetch dataset items
         items_data = self._request("GET", f"{BASE_URL}/actor-runs/{run_id}/dataset/items")
         posts = items_data if isinstance(items_data, list) else items_data.get("items", [])
-        log.info(f"Actor returned {len(posts)} posts for {source_name}")
-        if posts:
-            sample = posts[0]
-            log.info(f"[DEBUG] Sample post keys for {source_name}: {sorted(sample.keys())}")
-            if "error" in sample:
-                log.warning(f"[DEBUG] Actor error for {source_name}: error={sample.get('error')} desc={sample.get('errorDescription')}")
+        # Filter out error responses (e.g. page not accessible to anonymous users).
+        error_count = sum(1 for p in posts if "error" in p and not p.get("text"))
+        if error_count:
+            sample_err = next((p for p in posts if "error" in p), {})
+            log.warning(f"Actor: {error_count}/{len(posts)} posts inaccessible for {source_name} ({sample_err.get('error')}: {sample_err.get('errorDescription', '')[:80]})")
+        posts = [p for p in posts if "error" not in p]
+        log.info(f"Actor returned {len(posts)} usable posts for {source_name}")
 
         # 4. Normalize to standard format
         return [self._normalize(post, source_id, source_name) for post in posts if self._get_url(post)]
